@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <title>ILUMI | Portaria - Controle de Veículos</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/animate.css@4.1.1/animate.min.css" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body class="bg-light">
+  <nav class="navbar navbar-expand-lg navbar-ilumi shadow-sm">
+    <div class="container-fluid">
+      <a class="navbar-brand d-flex align-items-center" href="#">
+        <img src="assets/logo-ilumi.jpg" alt="ILUMI" class="logo-ilumi me-2" />
+        <span class="fw-bold">Portaria</span>
+      </a>
+      <div class="d-flex align-items-center">
+        <span class="me-3 small text-white" id="user-info"></span>
+        <button class="btn btn-sm btn-outline-light" id="logout-btn">Sair</button>
+      </div>
+    </div>
+  </nav>
+
+  <div class="container-fluid py-4">
+    <div class="row g-3">
+      <div class="col-12 col-lg-3">
+        <div class="card shadow-sm h-100">
+          <div class="card-header bg-ilumi text-white">
+            <strong>Menu Portaria</strong>
+          </div>
+          <div class="list-group list-group-flush" id="portaria-menu">
+            <button class="list-group-item list-group-item-action active" data-screen="veiculos">
+              Veículos
+            </button>
+            <button class="list-group-item list-group-item-action" data-screen="reservas">
+              Reservas
+            </button>
+            <button class="list-group-item list-group-item-action" data-screen="historico">
+              Histórico
+            </button>
+            <button class="list-group-item list-group-item-action" data-screen="usuarios">
+              Funcionários / Logins
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div class="col-12 col-lg-9">
+        <!-- Tela: Veículos -->
+        <section id="screen-veiculos" class="screen active animate__animated animate__fadeIn">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Veículos cadastrados</h5>
+              <button class="btn btn-sm btn-ilumi" id="btn-novo-veiculo">Novo veículo</button>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>Placa</th>
+                      <th>Modelo</th>
+                      <th>KMs</th>
+                      <th>Situação</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabela-veiculos">
+                    <!-- preenchido via JS -->
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tela: Reservas -->
+        <section id="screen-reservas" class="screen animate__animated animate__fadeIn d-none">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Reservas</h5>
+              <button class="btn btn-sm btn-ilumi" id="btn-nova-reserva">Nova reserva</button>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                  <label class="form-label">Filtrar por veículo</label>
+                  <select id="filtro-reserva-veiculo" class="form-select"></select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Filtrar por funcionário</label>
+                  <select id="filtro-reserva-funcionario" class="form-select"></select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Status</label>
+                  <select id="filtro-reserva-status" class="form-select">
+                    <option value="">Todos</option>
+                    <option value="aberta">Abertas</option>
+                    <option value="em_uso">Em uso</option>
+                    <option value="finalizada">Finalizadas</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>Veículo</th>
+                      <th>Funcionário</th>
+                      <th>Data / Hora saída</th>
+                      <th>Data / Hora retorno</th>
+                      <th>Status</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabela-reservas">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tela: Histórico -->
+        <section id="screen-historico" class="screen animate__animated animate__fadeIn d-none">
+          <div class="card shadow-sm">
+            <div class="card-header">
+              <h5 class="mb-0">Histórico de utilização</h5>
+            </div>
+            <div class="card-body">
+              <div class="row g-3 mb-3">
+                <div class="col-md-4">
+                  <label class="form-label">Veículo</label>
+                  <select id="filtro-historico-veiculo" class="form-select"></select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Funcionário</label>
+                  <select id="filtro-historico-funcionario" class="form-select"></select>
+                </div>
+                <div class="col-md-4">
+                  <label class="form-label">Período</label>
+                  <input type="date" id="filtro-historico-data" class="form-control" />
+                </div>
+              </div>
+
+              <div class="table-responsive">
+                <table class="table table-striped align-middle">
+                  <thead>
+                    <tr>
+                      <th>Veículo</th>
+                      <th>Funcionário</th>
+                      <th>Saída</th>
+                      <th>Retorno</th>
+                      <th>Km início</th>
+                      <th>Km fim</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabela-historico">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Tela: Usuários -->
+        <section id="screen-usuarios" class="screen animate__animated animate__fadeIn d-none">
+          <div class="card shadow-sm">
+            <div class="card-header d-flex justify-content-between align-items-center">
+              <h5 class="mb-0">Funcionários / Logins</h5>
+              <button class="btn btn-sm btn-ilumi" id="btn-novo-usuario">Novo funcionário</button>
+            </div>
+            <div class="card-body">
+              <div class="table-responsive">
+                <table class="table table-hover align-middle">
+                  <thead>
+                    <tr>
+                      <th>Nome</th>
+                      <th>E-mail</th>
+                      <th>Ativo</th>
+                      <th>Ações</th>
+                    </tr>
+                  </thead>
+                  <tbody id="tabela-usuarios">
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        </section>
+
+      </div>
+    </div>
+  </div>
+
+  <!-- Modais serão preenchidos via JS / Bootstrap -->
+  <div id="modal-container"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+
+  <script src="js/supabaseClient.js"></script>
+  <script src="js/portaria.js"></script>
+</body>
+</html>
