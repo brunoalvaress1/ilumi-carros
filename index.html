@@ -27,13 +27,7 @@
         <label for="password" class="form-label">Senha</label>
         <input type="password" class="form-control" id="password" required />
       </div>
-      <div class="mb-3">
-        <label for="role" class="form-label">Tipo de acesso</label>
-        <select id="role" class="form-select" required>
-          <option value="portaria">Portaria</option>
-          <option value="funcionario">Funcionário</option>
-        </select>
-      </div>
+      
       <button type="submit" class="btn btn-ilumi w-100">Entrar</button>
       <p class="text-danger small mt-2" id="login-error"></p>
     </form>
@@ -41,6 +35,15 @@
     <p class="text-center text-muted small mt-4 mb-0">
       &copy; <span id="year"></span> ILUMI - Controle de Veículos
     </p>
+
+    <footer class="ilumi-footer text-center py-3 mt-4">
+  Criado por 
+  <strong>Prime Pages</strong> —
+  <a href="https://www.instagram.com/primepages_leme" target="_blank" class="footer-link">
+    @primepages_leme
+  </a>
+</footer>
+
   </div>
 
   <!-- JS libs -->
@@ -52,5 +55,8 @@
 
   <script src="js/supabaseClient.js"></script>
   <script src="js/auth.js"></script>
+
+  
+
 </body>
 </html>

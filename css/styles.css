@@ -1,63 +1,273 @@
-body {
-  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+/* -----------------------------
+   ILUMI - ESTILO VERDE OFICIAL
+   Sistema de Veículos
+--------------------------------*/
+
+:root {
+  --ilumi-green: #00923f;
+  --ilumi-green-dark: #007734;
+  --ilumi-green-light: #c9efd7;
+  --ilumi-bg: #f4f7f5;
+  --ilumi-card: #ffffff;
+  --ilumi-border: #e2e6e2;
+  --ilumi-text-dark: #1f1f1f;
+  --ilumi-text-light: #6d6d6d;
 }
 
-.bg-gradient-ilumi {
-  background: radial-gradient(circle at center, #ffffff 0, #f0f4f7 40%, #dce7ec 100%);
+/* Background global */
+body {
+  background: var(--ilumi-bg);
+  font-family: "Inter", Arial, sans-serif;
+  color: var(--ilumi-text-dark);
+}
+
+/* NAVBAR */
+.navbar-ilumi {
+  background: var(--ilumi-green);
+  padding: 12px 20px;
 }
 
 .logo-ilumi {
-  height: 48px;
-  object-fit: contain;
+  height: 42px;
+  border-radius: 6px;
 }
 
-.text-ilumi {
-  color: #009245;
-}
-
+/* Botões */
 .btn-ilumi {
-  background-color: #009245;
-  border-color: #009245;
+  background: var(--ilumi-green);
   color: #fff;
+  border: none;
+  transition: 0.2s ease-in-out;
 }
 
 .btn-ilumi:hover {
-  background-color: #007a39;
-  border-color: #007a39;
-  color: #fff;
+  background: var(--ilumi-green-dark);
+  color: white;
 }
 
-.navbar-ilumi {
-  background: #009245;
+/* MENU LATERAL */
+#portaria-menu button {
+  border: none;
+  padding: 14px;
+  font-size: 15px;
+  font-weight: 500;
+  color: var(--ilumi-text-dark);
+  transition: 0.2s;
 }
 
+#portaria-menu button:hover {
+  background: var(--ilumi-green-light);
+}
+
+#portaria-menu button.active {
+  background: var(--ilumi-green);
+  color: white;
+}
+
+/* CARDS */
+.card {
+  border-radius: 12px;
+  border: 1px solid var(--ilumi-border);
+}
+
+.card-header {
+  background: var(--ilumi-card);
+  border-bottom: 1px solid var(--ilumi-border);
+  padding: 16px;
+}
+
+/* TABELAS */
+.table thead {
+  background: var(--ilumi-green-light);
+}
+
+.table thead th {
+  border-bottom: 2px solid var(--ilumi-border);
+  color: var(--ilumi-green-dark);
+  font-weight: 600;
+}
+
+.table tbody tr:hover {
+  background: #e7f7ec;
+}
+
+/* Ícones de status */
+.status-aberta {
+  color: var(--ilumi-green);
+  font-weight: 600;
+}
+
+.status-em-uso {
+  color: #c68a00;
+  font-weight: 600;
+}
+
+.status-finalizada {
+  color: #006d2d;
+  font-weight: 600;
+}
+
+/* Inputs */
+.form-control,
+.form-select {
+  border-radius: 8px;
+  border: 1px solid var(--ilumi-border);
+}
+
+.form-control:focus,
+.form-select:focus {
+  border-color: var(--ilumi-green);
+  box-shadow: 0 0 0 0.15rem rgba(0, 146, 63, 0.25);
+}
+
+/* MODAIS */
+.modal-header.bg-ilumi {
+  background: var(--ilumi-green);
+  color: white;
+}
+
+.modal-content {
+  border-radius: 14px;
+  border: none;
+}
+
+/* Animações */
+.screen {
+  animation-duration: 0.4s !important;
+}
+
+/* RESPONSIVIDADE */
+@media (max-width: 992px) {
+  #portaria-menu button {
+    padding: 12px;
+    font-size: 14px;
+  }
+}
+
+
+
+
+/* LOGIN ILUMI VERDE */
 .login-card {
-  width: 100%;
-  max-width: 420px;
+  max-width: 460px !important; /* antes provavelmente ~340px */
+  width: 90%;
+  margin: auto;
+  padding: 30px;
+  border-radius: 14px;
+  background: #ffffff;
+  border: 1px solid var(--ilumi-border);
+  box-shadow: 0 4px 18px rgba(0,0,0,0.08);
+}
+
+.login-card h3 {
+  color: var(--ilumi-green);
+  font-weight: 700;
+}
+
+
+/* Rodapé | Prime Pages */
+.ilumi-footer {
+  background: var(--ilumi-green);
+  color: white;
+  font-size: 14px;
+  letter-spacing: 0.3px;
+  border-top: 3px solid var(--ilumi-green-dark);
+}
+
+.ilumi-footer .footer-link {
+  color: #e8ffe8;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.ilumi-footer .footer-link:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+
+
+
+
+/* -------------------------------------------------
+   GRADE DE HORÁRIOS (FUNCIONÁRIO)
+---------------------------------------------------*/
+.slot-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  max-height: 220px;
+  overflow-y: auto;
+  border: 1px solid var(--ilumi-border);
+  border-radius: 10px;
+  padding: 0.5rem;
   background: #ffffff;
 }
 
-.screen {
-  min-height: 400px;
+.slot-pill {
+  font-size: 0.78rem;
+  padding: 0.25rem 0.55rem;
+  border-radius: 999px;
+  border: 1px solid var(--ilumi-border);
+  cursor: pointer;
+  white-space: nowrap;
+  user-select: none;
+  transition: 0.15s ease-in-out;
 }
 
-.screen.active {
-  display: block !important;
+.slot-pill.disponivel {
+  background: var(--ilumi-green-light);
+  color: var(--ilumi-green-dark);
 }
 
-/* Pequenas animações com keyframes */
-@keyframes pulse-soft {
-  0% { box-shadow: 0 0 0 0 rgba(0, 146, 69, 0.4); }
-  70% { box-shadow: 0 0 0 12px rgba(0, 146, 69, 0); }
-  100% { box-shadow: 0 0 0 0 rgba(0, 146, 69, 0); }
+.slot-pill.disponivel:hover {
+  filter: brightness(0.95);
 }
 
-.btn-ilumi {
-  animation: pulse-soft 2.4s infinite;
+.slot-pill.bloqueado {
+  background: #dddddd;
+  color: #777777;
+  cursor: not-allowed;
 }
 
-@media (max-width: 768px) {
-  .login-card {
-    margin: 1rem;
-  }
+.slot-pill.selecionado {
+  background: var(--ilumi-green);
+  color: #ffffff;
+  border-color: var(--ilumi-green-dark);
+}
+
+.slot-legenda {
+  font-size: 0.8rem;
+  color: var(--ilumi-text-light);
+}
+
+.card-ilumi {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.card-ilumi .card-header {
+  background: var(--ilumi-green) !important;
+  color: #fff !important;
+  padding-top: 0.85rem;
+  padding-bottom: 0.85rem;
+  font-size: 1rem;
+}
+
+.card-ilumi .material-icons-outlined {
+  font-size: 20px;
+  opacity: 0.85;
+}
+
+.table thead th {
+  background: #f3f7f3 !important;
+}
+
+.btn-success, .btn-danger {
+  font-size: 0.95rem;
+  padding: 0.55rem 0;
+}
+
+#tabela-minhas-reservas tr td {
+  font-size: 0.9rem;
 }

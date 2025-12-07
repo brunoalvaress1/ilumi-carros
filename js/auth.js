@@ -1,10 +1,4 @@
-// js/auth.js
-// Script só da tela de login
-
 document.addEventListener('DOMContentLoaded', () => {
-  const yearSpan = document.getElementById('year');
-  if (yearSpan) yearSpan.textContent = new Date().getFullYear();
-
   const form = document.getElementById('login-form');
   const errorEl = document.getElementById('login-error');
 
@@ -14,7 +8,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     const email = document.getElementById('email').value.trim();
     const password = document.getElementById('password').value;
-    const role = document.getElementById('role').value;
 
     if (!email || !password) {
       errorEl.textContent = 'Preencha usuário e senha.';
@@ -22,7 +15,7 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     try {
-      // Login no Supabase (auth de e-mail e senha)
+      // Login no Supabase
       const { data, error } = await supa.auth.signInWithPassword({
         email,
         password
@@ -34,10 +27,18 @@ document.addEventListener('DOMContentLoaded', () => {
         return;
       }
 
-      // Guarda o perfil básico na sessionStorage
+      // ---------- DEFINIR ROLE AUTOMATICAMENTE ----------
+      let role = "funcionario";
+
+      if (email.toLowerCase() === "portaria@ilumi.com" || email.toLowerCase() === "portaria") {
+        role = "portaria";
+      }
+
+      // Salvar sessão
       sessionStorage.setItem('ilumiUserRole', role);
       sessionStorage.setItem('ilumiUserEmail', email);
 
+      // Redirecionar
       if (role === 'portaria') {
         window.location.href = 'portaria.html';
       } else {
