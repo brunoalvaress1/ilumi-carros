@@ -387,12 +387,16 @@ async function abrirModalNovaReserva() {
 }
 
 // Verificar conflito de horário ao criar reserva
-async function existeConflito(veiculo_id, saida, retorno) {
-  const { data, error } = await supa
+async function existeConflito(veiculo_id, saida, retorno, excludeId = null) {
+  let query = supa
     .from("reservas")
     .select("data_saida_prevista, data_retorno_prevista, status")
     .eq("veiculo_id", veiculo_id)
     .neq("status", "cancelada");
+
+  if (excludeId) query = query.neq("id", excludeId); // Ignora a reserva sendo editada
+
+  const { data, error } = await query;
 
   if (error) return false;
 
@@ -412,7 +416,7 @@ async function existeConflito(veiculo_id, saida, retorno) {
 
 async function salvarReserva() {
   const funcionario = document.getElementById("res-func").value;
-  const veiculo = document.getElementById("res-veic").value;
+    const veiculo = document.getElementById("res-veic").value;
   const saida = document.getElementById("res-saida").value;
   const retorno = document.getElementById("res-retorno").value;
   const motivo = document.getElementById("res-motivo").value.trim();
@@ -541,48 +545,113 @@ async function abrirModalEditarReserva(id) {
 }
 
 async function salvarEdicaoReserva(id) {
-  const data_saida_real = document.getElementById("edit-res-saida-real").value || null;
-  const data_retorno_real = document.getElementById("edit-res-ret-real").value || null;
+  try {
+    console.log("Salvando edição para reserva ID:", id);
 
-  const km_inicio_val = document.getElementById("edit-res-km-inicio").value;
-  const km_fim_val = document.getElementById("edit-res-km-fim").value;
+    const funcionario_id = document.getElementById("edit-res-func")?.value;
+    const veiculo_id = document.getElementById("edit-res-veic")?.value;
+    const data_saida_prevista = document.getElementById("edit-res-saida-prev")?.value || null;
+    const data_retorno_prevista = document.getElementById("edit-res-ret-prev")?.value || null;
+    const data_saida_real = document.getElementById("edit-res-saida-real")?.value || null;
+    const data_retorno_real = document.getElementById("edit-res-ret-real")?.value || null;
+    const km_inicio = document.getElementById("edit-res-km-inicio")?.value ? Number(document.getElementById("edit-res-km-inicio").value) : null;
+    const km_fim = document.getElementById("edit-res-km-fim")?.value ? Number(document.getElementById("edit-res-km-fim").value) : null;
+    const motivo = document.getElementById("edit-res-motivo")?.value?.trim() || null;
 
-  const km_inicio = km_inicio_val === "" ? null : Number(km_inicio_val);
-  const km_fim = km_fim_val === "" ? null : Number(km_fim_val);
+    if (!funcionario_id || !veiculo_id) {
+      Swal.fire("Erro", "Funcionário e veículo são obrigatórios.", "error");
+      return;
+    }
 
-  const motivo = document.getElementById("edit-res-motivo").value.trim() || null;
+    const dSaidaPrev = data_saida_prevista ? new Date(data_saida_prevista) : null;
+    const dRetPrev = data_retorno_prevista ? new Date(data_retorno_prevista) : null;
+    if (dSaidaPrev && dRetPrev && dRetPrev <= dSaidaPrev) {
+      Swal.fire("Erro", "Retorno previsto deve ser após saída.", "error");
+      return;
+    }
 
-  if (km_inicio !== null && km_fim !== null && km_fim < km_inicio) {
-    Swal.fire("Atenção", "O KM de retorno não pode ser menor que o KM de saída.", "warning");
-    return;
+    const dRetReal = data_retorno_real ? new Date(data_retorno_real) : null;
+    const dSaidaReal = data_saida_real ? new Date(data_saida_real) : null;
+    if (dSaidaReal && dRetReal && dRetReal <= dSaidaReal) {
+      Swal.fire("Erro", "Retorno real deve ser após saída.", "error");
+      return;
+    }
+
+    if (km_inicio && km_fim && km_fim < km_inicio) {
+      Swal.fire("Erro", "KM fim não pode ser menor que KM início.", "error");
+      return;
+    }
+
+    if (veiculo_id && data_saida_prevista && data_retorno_prevista) {
+      const conflito = await existeConflito(veiculo_id, data_saida_prevista, data_retorno_prevista, id);
+      if (conflito) {
+        Swal.fire("Erro", "Conflito de horário com outra reserva.", "error");
+        return;
+      }
+    }
+
+    const updates = {
+      funcionario_id,
+      veiculo_id,
+      data_saida_prevista,
+      data_retorno_prevista,
+      data_saida_real,
+      data_retorno_real,
+      km_inicio,
+      km_fim,
+      motivo
+    };
+
+    console.log("Updates enviados:", updates);
+    const { error } = await supa.from("reservas").update(updates).eq("id", id);
+
+    if (error) {
+      console.error("Erro Supabase:", error);
+      Swal.fire("Erro", `Falha ao salvar: ${error.message}`, "error");
+      return;
+    }
+
+    const modalEl = document.getElementById("modalEditReserva");
+    if (modalEl) {
+      const inst = bootstrap.Modal.getInstance(modalEl);
+      if (inst) inst.hide();
+    }
+
+    Swal.fire("Sucesso!", "Reserva atualizada.", "success");
+    carregarReservas();
+    carregarHistorico();
+
+  } catch (err) {
+    console.error("Erro inesperado:", err);
+    Swal.fire("Erro", "Erro inesperado. Verifique o console.", "error");
   }
+}
 
-  const updates = {
-    data_saida_real,
-    data_retorno_real,
-    km_inicio,
-    km_fim,
-    motivo
-  };
+async function excluirReserva(id) {
+  const confirmar = await Swal.fire({
+    title: "Excluir reserva?",
+    text: "Esta ação não poderá ser desfeita. A reserva será removida permanentemente.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, excluir",
+    cancelButtonText: "Cancelar"
+  });
+
+  if (!confirmar.isConfirmed) return;
 
   const { error } = await supa
     .from("reservas")
-    .update(updates)
+    .delete()
     .eq("id", id);
 
   if (error) {
-    console.error("ERRO AO ATUALIZAR RESERVA:", error);
-    Swal.fire("Erro", error.message || "Falha ao salvar alterações.", "error");
+    Swal.fire("Erro", "Falha ao excluir reserva.", "error");
+    console.error(error);
     return;
   }
 
-  const modalEl = document.getElementById("modalEditReserva");
-  if (modalEl) {
-    const inst = bootstrap.Modal.getInstance(modalEl);
-    if (inst) inst.hide();
-  }
+  Swal.fire("Excluída!", "A reserva foi removida com sucesso.", "success");
 
-  Swal.fire("Sucesso!", "Reserva atualizada!", "success");
   carregarReservas();
   carregarHistorico();
 }
@@ -611,7 +680,7 @@ async function carregarHistoricoFiltros() {
 
 async function carregarHistorico() {
   const tbody = document.getElementById("tabela-historico");
-  tbody.innerHTML = "<tr><td colspan='7'>Carregando...</td></tr>";
+  tbody.innerHTML = "<tr><td colspan='8'>Carregando...</td></tr>";
 
   const v = document.getElementById("filtro-historico-veiculo").value;
   const f = document.getElementById("filtro-historico-funcionario").value;
@@ -631,28 +700,63 @@ async function carregarHistorico() {
   const { data, error } = await query.order("data_saida_prevista", { ascending: false });
 
   if (error) {
-    tbody.innerHTML = "<tr><td colspan='7'>Erro ao carregar.</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='8'>Erro ao carregar.</td></tr>";
     return;
   }
 
   if (!data?.length) {
-    tbody.innerHTML = "<tr><td colspan='7'>Nenhum registro encontrado.</td></tr>";
+    tbody.innerHTML = "<tr><td colspan='8'>Nenhum registro encontrado.</td></tr>";
     return;
   }
 
   tbody.innerHTML = "";
   data.forEach(h => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${h.veiculo_modelo} (${h.veiculo_placa})</td>
-        <td>${h.funcionario_nome ?? "-"}</td>
-        <td>${h.motivo ?? "-"}</td>                <!-- 🔹 Para onde foi -->
-        <td>${formatarDataHoraBR(h.data_saida_real)}</td>
-        <td>${formatarDataHoraBR(h.data_retorno_real)}</td>
-        <td>${h.km_inicio ?? "-"}</td>
-        <td>${h.km_fim ?? "-"}</td>
-      </tr>`;
+  console.log("Reserva ID:", h.id, "Foto Início:", h.foto_painel_inicio, "Foto Fim:", h.foto_painel_fim);
+
+  const fotoInicioBtn = h.foto_painel_inicio ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${h.foto_painel_inicio}')">Ver Início</button>` : "Sem foto";
+  const fotoFimBtn = h.foto_painel_fim ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${h.foto_painel_fim}')">Ver Fim</button>` : "Sem foto";
+
+  tbody.innerHTML += `
+    <tr>
+      <td>${h.veiculo_modelo} (${h.veiculo_placa})</td>
+      <td>${h.funcionario_nome ?? "-"}</td>
+      <td>${h.motivo ?? "-"}</td>
+      <td>${formatarDataHoraBR(h.data_saida_real)}</td>
+      <td>${formatarDataHoraBR(h.data_retorno_real)}</td>
+      <td>${h.km_inicio ?? "-"}</td>
+      <td>${h.km_fim ?? "-"}</td>
+      <td>${fotoInicioBtn} ${fotoFimBtn}</td>
+    </tr>`;
+});
+}
+
+async function excluirDoHistorico(id) {
+  const confirmar = await Swal.fire({
+    title: "Excluir do histórico?",
+    text: "Esta ação removerá permanentemente o registro.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, excluir",
+    cancelButtonText: "Cancelar"
   });
+
+  if (!confirmar.isConfirmed) return;
+
+  const { error } = await supa
+    .from("reservas")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    Swal.fire("Erro", "Falha ao excluir registro.", "error");
+    console.error(error);
+    return;
+  }
+
+  Swal.fire("Excluído!", "O registro foi removido do histórico.", "success");
+
+  carregarHistorico();
+  carregarReservas();
 }
 
 // ----------------------------------------------------
@@ -811,31 +915,19 @@ async function salvarEdicaoFuncionario(id) {
 }
 
 
-async function removerDoHistorico(id) {
-  const confirmar = await Swal.fire({
-    title: "Remover registro?",
-    text: "Esta ação não poderá ser desfeita.",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Sim, remover",
-    cancelButtonText: "Cancelar"
-  });
-
-  if (!confirmar.isConfirmed) return;
-
-  const { error } = await supa
-    .from("reservas")
-    .delete()
-    .eq("id", id);
-
-  if (error) {
-    Swal.fire("Erro", "Falha ao remover registro.", "error");
-    console.error(error);
+function verFoto(path) {
+  console.log("Tentando ver foto com path:", path);
+  if (!path) {
+    Swal.fire("Erro", "Path da foto não encontrado.", "error");
     return;
   }
 
-  Swal.fire("Removido!", "O registro foi apagado do histórico.", "success");
+  const { data, error } = supa.storage.from('painel-fotos').getPublicUrl(path);
+  console.log("URL gerada:", data?.publicUrl, "Erro:", error);
 
-  carregarHistorico();
-  carregarReservas(); // atualiza tabela principal também
+  if (data?.publicUrl) {
+    window.open(data.publicUrl, '_blank');
+  } else {
+    Swal.fire("Erro", "Foto não encontrada ou bucket não público.", "error");
+  }
 }

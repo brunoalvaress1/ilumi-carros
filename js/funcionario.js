@@ -400,14 +400,92 @@ function configurarFormReserva() {
 // MINHAS RESERVAS + SELECT PARA CHECK-IN/OUT
 // ------------------------------------------------------------
 async function carregarMinhasReservas() {
+  console.log("=== Iniciando carregarMinhasReservas ===");
   const tbody = document.getElementById("tabela-minhas-reservas");
-  const select = document.getElementById("check-reserva");
-
   tbody.innerHTML = '<tr><td colspan="4">Carregando...</td></tr>';
+
+  try {
+    const email = sessionStorage.getItem("ilumiUserEmail");
+    console.log("E-mail do usuário:", email);
+
+    if (!email) {
+      tbody.innerHTML = '<tr><td colspan="4">Erro: Usuário não logado.</td></tr>';
+      return;
+    }
+
+    const { data: funcionario, error: funcError } = await supa
+      .from("funcionarios")
+      .select("id")
+      .eq("email", email)
+      .maybeSingle();
+
+    console.log("Dados do funcionário:", funcionario, "Erro:", funcError);
+
+    if (funcError) {
+      tbody.innerHTML = '<tr><td colspan="4">Erro ao buscar funcionário.</td></tr>';
+      console.error("Erro no funcionário:", funcError);
+      return;
+    }
+
+    if (!funcionario) {
+      tbody.innerHTML = '<tr><td colspan="4">Funcionário não encontrado.</td></tr>';
+      return;
+    }
+
+    const { data, error } = await supa
+      .from("reservas_view")
+      .select("*")
+      .eq("funcionario_id", funcionario.id)
+      .order("data_saida_prevista", { ascending: false });
+
+    console.log("Dados das reservas:", data, "Erro:", error);
+
+    if (error) {
+      tbody.innerHTML = '<tr><td colspan="4">Erro ao carregar reservas.</td></tr>';
+      console.error("Erro nas reservas:", error);
+      return;
+    }
+
+    if (!data || data.length === 0) {
+      tbody.innerHTML = '<tr><td colspan="4">Você ainda não tem reservas.</td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = "";
+    data.forEach(r => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
+          <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
+          <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
+          <td>${r.status}</td>
+        </tr>
+      `;
+    });
+
+    console.log("=== carregarMinhasReservas concluído ===");
+
+  } catch (err) {
+    console.error("Erro inesperado em carregarMinhasReservas:", err);
+    tbody.innerHTML = '<tr><td colspan="4">Erro inesperado. Verifique o console.</td></tr>';
+  }
+}
+
+/// ------------------------------------------------------------
+// CHECK-IN / CHECK-OUT (SEPARADOS)
+// ------------------------------------------------------------
+function configurarCheckinCheckout() {
+  document.getElementById("btn-checkin").onclick = () => fazerCheck("in");
+  document.getElementById("btn-checkout").onclick = () => fazerCheck("out");
+  carregarReservasCheckin();
+  carregarReservasCheckout();
+}
+
+async function carregarReservasCheckin() {
+  const select = document.getElementById("checkin-reserva");
   select.innerHTML = '<option value="">Selecione...</option>';
 
   const email = sessionStorage.getItem("ilumiUserEmail");
-
   const { data: funcionario } = await supa
     .from("funcionarios")
     .select("id")
@@ -420,92 +498,99 @@ async function carregarMinhasReservas() {
     .from("reservas_view")
     .select("*")
     .eq("funcionario_id", funcionario.id)
+    .eq("status", "aberta")  // Só reservas abertas para check-in
     .order("data_saida_prevista", { ascending: false });
 
-  if (error) {
-    tbody.innerHTML = '<tr><td colspan="4">Erro ao carregar reservas.</td></tr>';
-    return;
-  }
-
-  if (!data || data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="4">Você ainda não tem reservas.</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = "";
+  if (error) return;
 
   data.forEach(r => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
-        <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
-        <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
-        <td>${r.status}</td>
-      </tr>
+    select.innerHTML += `
+      <option value="${r.id}" data-status="${r.status}">
+        ${r.veiculo_modelo} — ${formatarDataHoraBR(r.data_saida_prevista)}
+      </option>
     `;
-  });
-
-  data.forEach(r => {
-    if (r.status === "aberta" || r.status === "em_uso") {
-      select.innerHTML += `
-        <option value="${r.id}" data-status="${r.status}">
-          ${r.veiculo_modelo} — ${formatarDataHoraBR(r.data_saida_prevista)}
-        </option>
-      `;
-    }
   });
 }
 
-// ------------------------------------------------------------
-// CHECK-IN / CHECK-OUT
-// ------------------------------------------------------------
-function configurarCheckinCheckout() {
-  document.getElementById("btn-checkin").onclick = () => fazerCheck("in");
-  document.getElementById("btn-checkout").onclick = () => fazerCheck("out");
+async function carregarReservasCheckout() {
+  const select = document.getElementById("checkout-reserva");
+  select.innerHTML = '<option value="">Selecione...</option>';
+
+  const email = sessionStorage.getItem("ilumiUserEmail");
+  const { data: funcionario } = await supa
+    .from("funcionarios")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (!funcionario) return;
+
+  const { data, error } = await supa
+    .from("reservas_view")
+    .select("*")
+    .eq("funcionario_id", funcionario.id)
+    .eq("status", "em_uso")  // Só reservas em uso para check-out
+    .order("data_saida_prevista", { ascending: false });
+
+  if (error) return;
+
+  data.forEach(r => {
+    select.innerHTML += `
+      <option value="${r.id}" data-status="${r.status}">
+        ${r.veiculo_modelo} — ${formatarDataHoraBR(r.data_saida_prevista)}
+      </option>
+    `;
+  });
 }
 
 async function fazerCheck(tipo) {
-  const select = document.getElementById("check-reserva");
-  const reservaId = select.value;
-  const km = document.getElementById("check-km").value;
-  const foto = document.getElementById("check-foto").files[0];
+  const isCheckin = tipo === "in";
+  const select = isCheckin ? document.getElementById("checkin-reserva") : document.getElementById("checkout-reserva");
+  const km = isCheckin ? document.getElementById("checkin-km").value : document.getElementById("checkout-km").value;
+  const foto = isCheckin ? document.getElementById("checkin-foto").files[0] : document.getElementById("checkout-foto").files[0];
 
+  const reservaId = select.value;
   if (!reservaId || !km || !foto) {
     Swal.fire("Atenção", "Selecione a reserva, informe o KM e envie a foto.", "warning");
     return;
   }
 
   const status = select.options[select.selectedIndex].dataset.status;
-
-  if (tipo === "in" && status !== "aberta") {
+  if (isCheckin && status !== "aberta") {
     Swal.fire("Atenção", "Só é possível fazer check-in de reservas abertas.", "warning");
     return;
   }
-  if (tipo === "out" && status !== "em_uso") {
+  if (!isCheckin && status !== "em_uso") {
     Swal.fire("Atenção", "Só é possível fazer check-out de reservas em uso.", "warning");
     return;
   }
 
   const safeName = foto.name.replace(/[^\w.\-]/g, "_");
-  const email = sessionStorage.getItem("ilumiUserEmail");
-  const timestamp = Date.now();
-  const path = `${email}/${reservaId}/${tipo}-${timestamp}-${safeName}`;
+const email = sessionStorage.getItem("ilumiUserEmail");
+const timestamp = Date.now();
+const path = `${email}/${reservaId}/${tipo}-${timestamp}-${safeName}`;
 
-  const { error: uploadError } = await supa
-    .storage
-    .from("painel-fotos")
-    .upload(path, foto);
+console.log("Tentando upload para path:", path, "Arquivo:", foto.name);
 
-  if (uploadError) {
-    console.error(uploadError);
-    Swal.fire("Erro", "Não foi possível enviar a foto.", "error");
-    return;
-  }
+const { error: uploadError } = await supa
+  .storage
+  .from("painel-fotos")
+  .upload(path, foto);
+
+console.log("Upload erro:", uploadError);
+
+if (uploadError) {
+  console.error("Erro no upload:", uploadError);
+  Swal.fire("Erro", "Não foi possível enviar a foto.", "error");
+  return;
+}
+
+console.log("Upload bem-sucedido, path salvo:", path);
 
   const agora = new Date().toISOString();
   let updates = {};
 
-  if (tipo === "in") {
+  if (isCheckin) {
     updates = {
       data_saida_real: agora,
       km_inicio: km,
@@ -532,9 +617,43 @@ async function fazerCheck(tipo) {
     return;
   }
 
+  // 🔹 NOVO: Se for check-out, atualize o KM atual do veículo
+  if (!isCheckin) {
+    // Busque o veiculo_id da reserva
+    const { data: reserva } = await supa
+      .from("reservas")
+      .select("veiculo_id")
+      .eq("id", reservaId)
+      .single();
+
+    if (reserva) {
+      const { error: veicError } = await supa
+        .from("veiculos")
+        .update({ km_atual: km })  // Atualiza km_atual com o km_fim
+        .eq("id", reserva.veiculo_id);
+
+      if (veicError) {
+        console.error("Erro ao atualizar KM do veículo:", veicError);
+        // Não bloqueia o check-out, apenas loga o erro
+      } else {
+        console.log("KM do veículo atualizado com sucesso.");
+      }
+    }
+  }
+
   Swal.fire("Sucesso!", `Check-${tipo === "in" ? "in" : "out"} registrado!`, "success");
 
-  document.getElementById("check-km").value = "";
-  document.getElementById("check-foto").value = "";
+  // Limpar campos
+  if (isCheckin) {
+    document.getElementById("checkin-km").value = "";
+    document.getElementById("checkin-foto").value = "";
+  } else {
+    document.getElementById("checkout-km").value = "";
+    document.getElementById("checkout-foto").value = "";
+  }
+
+  // Recarregar tabelas e selects
   carregarMinhasReservas();
+  carregarReservasCheckin();
+  carregarReservasCheckout();
 }

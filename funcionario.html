@@ -35,13 +35,12 @@
     </div>
   </nav>
 
-  <!-- CONTEÚDO -->
+    <!-- CONTEÚDO -->
   <div class="container py-4">
     <div class="row g-4">
 
+      <!-- NOVA RESERVA -->
       <div class="col-12 col-lg-4">
-
-        <!-- NOVA RESERVA -->
         <div class="card shadow-sm mb-4 card-ilumi">
           <div class="card-header bg-ilumi text-white d-flex align-items-center">
             <strong class="me-2">Nova reserva</strong>
@@ -50,7 +49,6 @@
 
           <div class="card-body">
             <form id="form-reserva">
-
               <div class="mb-3">
                 <label class="form-label">Veículo</label>
                 <select id="reserva-veiculo" class="form-select" required></select>
@@ -93,52 +91,89 @@
             </form>
           </div>
         </div>
-
-        <!-- CHECK-IN / CHECK-OUT -->
-        <div class="card shadow-sm mb-4 card-ilumi">
-          <div class="card-header bg-ilumi text-white d-flex align-items-center">
-            <strong class="me-2">Check-in / Check-out</strong>
-            <span class="material-icons-outlined">fact_check</span>
-          </div>
-
-          <div class="card-body">
-            <form id="form-check">
-
-              <div class="mb-3">
-                <label class="form-label">Selecione a reserva</label>
-                <select id="check-reserva" class="form-select"></select>
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Km atual</label>
-                <input type="number" id="check-km" class="form-control" placeholder="Ex: 12345">
-              </div>
-
-              <div class="mb-3">
-                <label class="form-label">Foto do painel</label>
-                <input type="file" id="check-foto" class="form-control" accept="image/*">
-              </div>
-
-              <button type="button" id="btn-checkin" class="btn btn-success w-100 mb-2 fw-bold">
-                ✔ Fazer Check-in
-              </button>
-
-              <button type="button" id="btn-checkout" class="btn btn-danger w-100 fw-bold">
-                ⬅ Fazer Check-out
-              </button>
-
-              <small class="text-muted d-block mt-2 text-center">
-                A data, hora e seu nome são preenchidos automaticamente.
-              </small>
-
-            </form>
-          </div>
-        </div>
-
       </div>
 
-      <!-- MINHAS RESERVAS -->
+      <!-- CHECK-IN E CHECK-OUT LADO A LADO -->
       <div class="col-12 col-lg-8">
+        <div class="row g-3">
+          <!-- CHECK-IN -->
+          <div class="col-12 col-md-6">
+            <div class="card shadow-sm h-100 card-ilumi">
+              <div class="card-header bg-success text-white d-flex align-items-center">
+                <strong class="me-2">Fazer Check-in</strong>
+                <span class="material-icons-outlined">login</span>
+              </div>
+
+              <div class="card-body">
+                <form id="form-checkin">
+                  <div class="mb-3">
+                    <label class="form-label">Reserva para check-in</label>
+                    <select id="checkin-reserva" class="form-select"></select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Km atual</label>
+                    <input type="number" id="checkin-km" class="form-control" placeholder="Ex: 12345">
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Foto do painel</label>
+                    <input type="file" id="checkin-foto" class="form-control" accept="image/*">
+                  </div>
+
+                  <button type="button" id="btn-checkin" class="btn btn-success w-100 fw-bold">
+                    ✔ Check-in
+                  </button>
+
+                  <small class="text-muted d-block mt-2 text-center">
+                    Após check-in, a reserva ficará bloqueada para check-out.
+                  </small>
+                </form>
+              </div>
+            </div>
+          </div>
+
+          <!-- CHECK-OUT -->
+          <div class="col-12 col-md-6">
+            <div class="card shadow-sm h-100 card-ilumi">
+              <div class="card-header bg-danger text-white d-flex align-items-center">
+                <strong class="me-2">Fazer Check-out</strong>
+                <span class="material-icons-outlined">logout</span>
+              </div>
+
+              <div class="card-body">
+                <form id="form-checkout">
+                  <div class="mb-3">
+                    <label class="form-label">Reserva para check-out</label>
+                    <select id="checkout-reserva" class="form-select"></select>
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Km atual</label>
+                    <input type="number" id="checkout-km" class="form-control" placeholder="Ex: 12345">
+                  </div>
+
+                  <div class="mb-3">
+                    <label class="form-label">Foto do painel</label>
+                    <input type="file" id="checkout-foto" class="form-control" accept="image/*">
+                  </div>
+
+                  <button type="button" id="btn-checkout" class="btn btn-danger w-100 fw-bold">
+                    ⬅ Check-out
+                  </button>
+
+                  <small class="text-muted d-block mt-2 text-center">
+                    Só após check-in.
+                  </small>
+                </form>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MINHAS RESERVAS (MAIOR E PROEMINENTE) -->
+      <div class="col-12">
         <div class="card shadow-sm card-ilumi">
           <div class="card-header bg-ilumi text-white d-flex align-items-center">
             <strong class="me-2">Minhas reservas</strong>
@@ -146,7 +181,7 @@
           </div>
 
           <div class="card-body">
-            <div class="table-responsive">
+            <div class="table-responsive" style="max-height: 400px; overflow-y: auto;">
               <table class="table table-hover align-middle text-center">
                 <thead class="table-light">
                   <tr>
@@ -165,7 +200,6 @@
 
     </div>
   </div>
-
   <!-- FOOTER -->
   <footer class="ilumi-footer text-center py-3 mt-4">
     Criado por <strong>Prime Pages</strong> — 
