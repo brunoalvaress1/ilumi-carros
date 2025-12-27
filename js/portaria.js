@@ -726,6 +726,9 @@ async function carregarHistorico() {
       <td>${h.km_inicio ?? "-"}</td>
       <td>${h.km_fim ?? "-"}</td>
       <td>${fotoInicioBtn} ${fotoFimBtn}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-danger" onclick="excluirDoHistorico('${h.id}')">Excluir</button>
+      </td>
     </tr>`;
 });
 }
