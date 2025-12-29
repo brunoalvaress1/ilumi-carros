@@ -61,10 +61,23 @@ function getMinDateTime() {
   return now.toISOString().slice(0, 16);
 }
 
-function formatarDataHoraBR(iso) {
-  if (!iso) return "-";
-  const d = new Date(iso);
-  if (isNaN(d)) return "-";
+function parseDbDate(value) {
+  if (!value) return null;
+
+  // Normaliza "2025-12-29 13:00:00" -> "2025-12-29T13:00:00"
+  const normalized = String(value).includes(" ")
+    ? String(value).replace(" ", "T")
+    : String(value);
+
+  // Se não tiver timezone (Z ou +00:00 etc), assume UTC
+  const hasTZ = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  return new Date(hasTZ ? normalized : `${normalized}Z`);
+}
+
+function formatarDataHoraBR(value) {
+  const d = parseDbDate(value);
+  if (!d || isNaN(d)) return "-";
+
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   const ano = d.getFullYear();
@@ -301,13 +314,9 @@ function selecionarHorarioSaida(dateObj, spanEl) {
   document.getElementById("reserva-retorno").value = "";
   limparGradeRetorno("Selecione o horário de retorno.");
 
-  // Preenche input hidden de saída
-  // Gera string yyyy-MM-ddTHH:MM
-  const data = estadoReservaFuncionario.data;
-  const hhmm = spanEl.textContent; // "HH:MM"
-  document.getElementById("reserva-saida").value = `${data}T${hhmm}`;
+  // ✅ SALVAR COM TIMEZONE (UTC) - evita -3h
+  document.getElementById("reserva-saida").value = dateObj.toISOString();
 
-  // Monta grade de retorno com base na saída
   montarGradeRetorno();
 }
 
@@ -320,9 +329,8 @@ function selecionarHorarioRetorno(dateObj, spanEl) {
   });
   spanEl.classList.add("selecionado");
 
-  const data = estadoReservaFuncionario.data;
-  const hhmm = spanEl.textContent;
-  document.getElementById("reserva-retorno").value = `${data}T${hhmm}`;
+  // ✅ SALVAR COM TIMEZONE (UTC) - evita -3h
+  document.getElementById("reserva-retorno").value = dateObj.toISOString();
 }
 
 // ------------------------------------------------------------
@@ -454,13 +462,22 @@ async function carregarMinhasReservas() {
     tbody.innerHTML = "";
     data.forEach(r => {
       tbody.innerHTML += `
-        <tr>
-          <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
-          <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
-          <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
-          <td>${r.status}</td>
-        </tr>
-      `;
+  <tr>
+    <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
+    <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
+    <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
+    <td>${r.status}</td>
+    <td>
+      ${
+        (r.status === "aberta")
+          ? `<button class="btn btn-sm btn-outline-danger" onclick="cancelarReservaFuncionario('${r.id}')">
+               Excluir
+             </button>`
+          : `<span class="text-muted small">-</span>`
+      }
+    </td>
+  </tr>
+`;
     });
 
     console.log("=== carregarMinhasReservas concluído ===");
@@ -656,4 +673,42 @@ console.log("Upload bem-sucedido, path salvo:", path);
   carregarMinhasReservas();
   carregarReservasCheckin();
   carregarReservasCheckout();
+}
+
+
+async function cancelarReservaFuncionario(reservaId) {
+  const confirmar = await Swal.fire({
+    title: "Excluir reserva?",
+    text: "A reserva será cancelada e o horário voltará a ficar disponível.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, excluir",
+    cancelButtonText: "Cancelar"
+  });
+
+  if (!confirmar.isConfirmed) return;
+
+  // ✅ Melhor prática: cancelar (não deletar)
+  const { error } = await supa
+    .from("reservas")
+    .update({ status: "cancelada" })
+    .eq("id", reservaId);
+
+  if (error) {
+    console.error(error);
+    Swal.fire("Erro", "Não foi possível excluir a reserva.", "error");
+    return;
+  }
+
+  Swal.fire("Pronto!", "Reserva cancelada com sucesso.", "success");
+
+  // Atualiza tela + selects de check-in/out
+  carregarMinhasReservas();
+  carregarReservasCheckin();
+  carregarReservasCheckout();
+
+  // Recalcula a grade se o usuário estiver montando uma nova reserva
+  if (estadoReservaFuncionario.veiculoId && estadoReservaFuncionario.data) {
+    onFiltroHorarioChange();
+  }
 }

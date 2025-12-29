@@ -31,18 +31,55 @@ document.addEventListener("DOMContentLoaded", () => {
 // ----------------------------------------------------
 // Helpers de data/hora
 // ----------------------------------------------------
-function formatarDataHoraBR(isoString) {
-  if (!isoString) return "-";
-  const d = new Date(isoString);
-  if (isNaN(d)) return "-";
+function parseDbDate(value) {
+  if (!value) return null;
+
+  // Normaliza "2025-12-29 13:00:00" -> "2025-12-29T13:00:00"
+  const normalized = String(value).includes(" ")
+    ? String(value).replace(" ", "T")
+    : String(value);
+
+  // Se não tiver timezone (Z ou +00:00 etc), assume UTC
+  const hasTZ = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  return new Date(hasTZ ? normalized : `${normalized}Z`);
+}
+
+function parseDbDate(value) {
+  if (!value) return null;
+
+  // Normaliza "2025-12-29 13:00:00" -> "2025-12-29T13:00:00"
+  const normalized = String(value).includes(" ")
+    ? String(value).replace(" ", "T")
+    : String(value);
+
+  // Se não tiver timezone (Z ou +00:00 etc), assume UTC
+  const hasTZ = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  return new Date(hasTZ ? normalized : `${normalized}Z`);
+}
+
+function parseDbDate(value) {
+  if (!value) return null;
+
+  // Normaliza "2025-12-29 13:00:00" -> "2025-12-29T13:00:00"
+  const normalized = String(value).includes(" ")
+    ? String(value).replace(" ", "T")
+    : String(value);
+
+  // Se não tiver timezone (Z ou +00:00 etc), assume UTC
+  const hasTZ = /([zZ]|[+\-]\d{2}:\d{2})$/.test(normalized);
+  return new Date(hasTZ ? normalized : `${normalized}Z`);
+}
+
+function formatarDataHoraBR(value) {
+  const d = parseDbDate(value);
+  if (!d || isNaN(d)) return "-";
 
   const dia = String(d.getDate()).padStart(2, "0");
   const mes = String(d.getMonth() + 1).padStart(2, "0");
   const ano = d.getFullYear();
-  const horas = String(d.getHours()).padStart(2, "0");
-  const minutos = String(d.getMinutes()).padStart(2, "0");
-
-  return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
+  const h = String(d.getHours()).padStart(2, "0");
+  const m = String(d.getMinutes()).padStart(2, "0");
+  return `${dia}/${mes}/${ano} ${h}:${m}`;
 }
 
 function toInputDateTime(isoString) {
@@ -765,6 +802,7 @@ async function excluirDoHistorico(id) {
 // ----------------------------------------------------
 // FUNCIONÁRIOS
 // ----------------------------------------------------
+// --- SUBSTITUA a função carregarUsuarios() por esta versão ---
 async function carregarUsuarios() {
   const tbody = document.getElementById("tabela-usuarios");
   tbody.innerHTML = "<tr><td colspan='4'>Carregando...</td></tr>";
@@ -782,17 +820,23 @@ async function carregarUsuarios() {
   }
 
   tbody.innerHTML = "";
-  data.forEach(f => {
+  data.forEach((f) => {
     tbody.innerHTML += `
       <tr>
         <td>${f.nome}</td>
         <td>${f.email}</td>
         <td>${f.ativo ? "Sim" : "Não"}</td>
-        <td>
+        <td class="d-flex gap-1 flex-wrap">
           <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarUsuario('${f.id}')">Editar</button>
+
           <button class="btn btn-sm btn-outline-${f.ativo ? "danger" : "success"}"
             onclick="alternarStatusUsuario('${f.id}', ${f.ativo})">
             ${f.ativo ? "Desativar" : "Ativar"}
+          </button>
+
+          <!-- NOVO BOTÃO: EXCLUIR -->
+          <button class="btn btn-sm btn-danger" onclick="excluirUsuario('${f.id}')">
+            Excluir
           </button>
         </td>
       </tr>`;
@@ -933,4 +977,45 @@ function verFoto(path) {
   } else {
     Swal.fire("Erro", "Foto não encontrada ou bucket não público.", "error");
   }
+}
+
+// --- ADICIONE esta função no final do portaria.js (ou após alternarStatusUsuario) ---
+async function excluirUsuario(id) {
+  const confirmar = await Swal.fire({
+    title: "Excluir funcionário?",
+    text: "Isso removerá o registro do funcionário do sistema. Essa ação não poderá ser desfeita.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, excluir",
+    cancelButtonText: "Cancelar"
+  });
+
+  if (!confirmar.isConfirmed) return;
+
+  const { error } = await supa
+    .from("funcionarios")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    console.error(error);
+
+    // Se houver vínculo com reservas, pode falhar por constraint (FK).
+    // Aqui mostramos uma mensagem mais amigável.
+    const msg = (error.message || "").toLowerCase();
+    if (msg.includes("foreign key") || msg.includes("constraint")) {
+      Swal.fire(
+        "Não foi possível excluir",
+        "Este funcionário possui reservas vinculadas. Em vez de excluir, desative o usuário.",
+        "error"
+      );
+      return;
+    }
+
+    Swal.fire("Erro", "Falha ao excluir funcionário.", "error");
+    return;
+  }
+
+  Swal.fire("Excluído!", "Funcionário removido com sucesso.", "success");
+  carregarUsuarios();
 }
