@@ -19,25 +19,27 @@ const estadoReservaFuncionario = {
   intervalosBloqueados: [] // {inicio: Date, fim: Date}
 };
 
-document.addEventListener('DOMContentLoaded', () => {
-  protegerRota('funcionario');
-  carregarUsuario();
-  carregarVeiculosDisponiveis();
-  carregarMinhasReservas();
-  configurarFormReserva();
-  configurarCheckinCheckout();
+    document.addEventListener('DOMContentLoaded', () => {
+    protegerRota('funcionario');
+    carregarUsuario();
+    carregarVeiculosDisponiveis();
+    carregarMinhasReservas();
+    configurarFormReserva();
+    configurarCheckinCheckout();
 
-  const saidaHidden = document.getElementById("reserva-saida");
-  const retornoHidden = document.getElementById("reserva-retorno");
-  if (saidaHidden) saidaHidden.value = "";
-  if (retornoHidden) retornoHidden.value = "";
+    const saidaHidden = document.getElementById("reserva-saida");
+    const retornoHidden = document.getElementById("reserva-retorno");
+    if (saidaHidden) saidaHidden.value = "";
+    if (retornoHidden) retornoHidden.value = "";
 
-  // Eventos para atualizar grade de horários
-  const selVeic = document.getElementById("reserva-veiculo");
-  const inputData = document.getElementById("reserva-data");
-  if (selVeic) selVeic.addEventListener("change", onFiltroHorarioChange);
-  if (inputData) inputData.addEventListener("change", onFiltroHorarioChange);
-});
+    // Eventos para atualizar grade de horários
+    const selVeic = document.getElementById("reserva-veiculo");
+    const inputData = document.getElementById("reserva-data");
+    if (selVeic) selVeic.addEventListener("change", onFiltroHorarioChange);
+    if (inputData) inputData.addEventListener("change", onFiltroHorarioChange);
+    });
+
+
 
 // ------------------------------------------------------------
 // PROTEÇÃO DE ROTA
@@ -628,7 +630,7 @@ async function fazerCheck(tipo) {
   const km = isCheckin ? document.getElementById("checkin-km").value : document.getElementById("checkout-km").value;
   const foto = isCheckin ? document.getElementById("checkin-foto").files[0] : document.getElementById("checkout-foto").files[0];
 
-  const reservaId = select.value;
+  const reservaId = Number(select.value);
   if (!reservaId || !km || !foto) {
     Swal.fire("Atenção", "Selecione a reserva, informe o KM e envie a foto.", "warning");
     return;
