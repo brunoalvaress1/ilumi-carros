@@ -173,9 +173,13 @@ async function carregarVeiculos() {
         <td>${v.modelo}</td>
         <td>${v.km_atual ?? "-"}</td>
         <td>${v.status ?? "-"}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarVeiculo('${v.id}')">Editar</button>
-        </td>
+        <td class="d-flex gap-1 flex-wrap">
+  <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarVeiculo('${v.id}')">Editar</button>
+  <button class="btn btn-sm btn-outline-secondary" onclick="abrirModalPermissoesVeiculo('${v.id}')">
+    Permissões
+  </button>
+</td>
+       
       </tr>`;
   });
 }
@@ -1018,4 +1022,146 @@ async function excluirUsuario(id) {
 
   Swal.fire("Excluído!", "Funcionário removido com sucesso.", "success");
   carregarUsuarios();
+}
+
+
+
+
+
+
+
+async function abrirModalPermissoesVeiculo(veiculoId) {
+  // Busca veículo
+  const { data: veiculo, error: veicErr } = await supa
+    .from("veiculos")
+    .select("id, modelo, placa")
+    .eq("id", veiculoId)
+    .maybeSingle();
+
+  if (veicErr || !veiculo) {
+    Swal.fire("Erro", "Veículo não encontrado.", "error");
+    return;
+  }
+
+  // Busca funcionários ativos
+  const { data: funcionarios, error: funcErr } = await supa
+    .from("funcionarios")
+    .select("id, nome, ativo")
+    .eq("ativo", true)
+    .order("nome");
+
+  if (funcErr) {
+    Swal.fire("Erro", "Falha ao carregar funcionários.", "error");
+    return;
+  }
+
+  // Busca permissões atuais do veículo
+  const { data: permissoes, error: permErr } = await supa
+    .from("veiculo_permissoes")
+    .select("funcionario_id")
+    .eq("veiculo_id", veiculoId);
+
+  if (permErr) {
+  Swal.fire("Erro", "Falha ao carregar permissões.", "error");
+  return;
+}
+
+  const permitidosSet = new Set((permissoes || []).map(p => p.funcionario_id));
+
+  // Monta lista de checkboxes
+  const listaHtml = (funcionarios || []).map(f => `
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox"
+             id="perm-${f.id}"
+             value="${f.id}"
+             ${permitidosSet.has(f.id) ? "checked" : ""}>
+      <label class="form-check-label" for="perm-${f.id}">
+        ${f.nome}
+      </label>
+    </div>
+  `).join("");
+
+  const modal = `
+<div class="modal fade" id="modalPermissoesVeiculo" tabindex="-1">
+  <div class="modal-dialog modal-dialog-scrollable"><div class="modal-content">
+    <div class="modal-header bg-ilumi text-white">
+      <h5 class="modal-title">
+        Permissões — ${veiculo.modelo} (${veiculo.placa})
+      </h5>
+      <button class="btn-close" data-bs-dismiss="modal"></button>
+    </div>
+
+    <div class="modal-body">
+      <p class="text-muted small mb-2">
+        Se você marcar pelo menos 1 funcionário, este veículo ficará restrito apenas aos selecionados.
+        Se deixar tudo desmarcado, o veículo fica livre para todos.
+      </p>
+      ${listaHtml || "<p class='text-muted'>Nenhum funcionário ativo.</p>"}
+    </div>
+
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+      <button class="btn btn-ilumi" onclick="salvarPermissoesVeiculo('${veiculoId}')">Salvar</button>
+    </div>
+  </div></div>
+</div>`;
+
+  document.getElementById("modal-container").innerHTML = modal;
+  new bootstrap.Modal("#modalPermissoesVeiculo").show();
+}
+
+async function salvarPermissoesVeiculo(veiculoId) {
+  // Lê todos os checkboxes do modal
+  const modalEl = document.getElementById("modalPermissoesVeiculo");
+  const checks = modalEl.querySelectorAll("input.form-check-input[type='checkbox']");
+  const selecionados = Array.from(checks)
+    .filter(ch => ch.checked)
+    .map(ch => ch.value);
+
+  // Busca permissões atuais
+  const { data: atuais, error: permErr } = await supa
+    .from("veiculo_permissoes")
+    .select("funcionario_id")
+    .eq("veiculo_id", veiculoId);
+
+  if (permErr) {
+    Swal.fire("Erro", "Falha ao ler permissões atuais.", "error");
+    return;
+  }
+
+  const atuaisSet = new Set((atuais || []).map(p => p.funcionario_id));
+  const novosSet = new Set(selecionados);
+
+  // Diferenças: inserir e remover
+  const paraInserir = selecionados.filter(fid => !atuaisSet.has(fid));
+  const paraRemover = (atuais || []).map(p => p.funcionario_id).filter(fid => !novosSet.has(fid));
+
+  // Inserir
+  if (paraInserir.length) {
+    const payload = paraInserir.map(funcionario_id => ({ veiculo_id: veiculoId, funcionario_id }));
+    const { error: insErr } = await supa.from("veiculo_permissoes").insert(payload);
+    if (insErr) {
+      console.error(insErr);
+      Swal.fire("Erro", "Falha ao salvar permissões (insert).", "error");
+      return;
+    }
+  }
+
+  // Remover
+  if (paraRemover.length) {
+    const { error: delErr } = await supa
+      .from("veiculo_permissoes")
+      .delete()
+      .eq("veiculo_id", veiculoId)
+      .in("funcionario_id", paraRemover);
+
+    if (delErr) {
+      console.error(delErr);
+      Swal.fire("Erro", "Falha ao salvar permissões (delete).", "error");
+      return;
+    }
+  }
+
+  bootstrap.Modal.getInstance(document.getElementById("modalPermissoesVeiculo")).hide();
+  Swal.fire("Sucesso!", "Permissões atualizadas.", "success");
 }

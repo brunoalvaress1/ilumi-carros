@@ -2,6 +2,15 @@
 // FUNCIONÁRIO – ILUMI SISTEMA DE VEÍCULOS
 // ------------------------------------------------------------
 
+
+// Veículos restritos: só os e-mails listados podem reservar
+// Se um veículo NÃO estiver aqui, fica liberado para todos.
+const VEICULOS_RESTRITOS = {
+  // "UUID_DO_VEICULO_AQUI": ["joao@ilumi.com", "maria@ilumi.com"],
+  // "UUID_DO_VEICULO_B": ["fulano@ilumi.com"]
+};
+
+
 const estadoReservaFuncionario = {
   veiculoId: null,
   data: null,         // yyyy-MM-dd
@@ -143,20 +152,73 @@ async function existeConflito(veiculo_id, saida, retorno) {
 // ------------------------------------------------------------
 async function carregarVeiculosDisponiveis() {
   const selectVeiculo = document.getElementById("reserva-veiculo");
+  selectVeiculo.innerHTML = '<option value="">Carregando...</option>';
 
-  const { data, error } = await supa
+  const email = sessionStorage.getItem("ilumiUserEmail");
+
+  // 1) Descobre funcionario_id
+  const { data: funcionario, error: funcErr } = await supa
+    .from("funcionarios")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (funcErr || !funcionario) {
+    selectVeiculo.innerHTML = '<option value="">Erro ao identificar funcionário</option>';
+    return;
+  }
+
+  // 2) Carrega veículos disponíveis
+  const { data: veiculos, error: veicErr } = await supa
     .from("veiculos")
-    .select("*")
+    .select("id, modelo, placa, status")
     .eq("status", "disponivel")
     .order("modelo");
 
-  if (error) {
+  if (veicErr) {
     Swal.fire("Erro", "Falha ao carregar veículos.", "error");
     return;
   }
 
+  const veiculoIds = (veiculos || []).map(v => v.id);
+  if (!veiculoIds.length) {
+    selectVeiculo.innerHTML = '<option value="">Sem veículos disponíveis</option>';
+    return;
+  }
+
+  // 3) Busca todas as permissões desses veículos
+  const { data: perms, error: permErr } = await supa
+    .from("veiculo_permissoes")
+    .select("veiculo_id, funcionario_id")
+    .in("veiculo_id", veiculoIds);
+
+  if (permErr) {
+    Swal.fire("Erro", "Falha ao carregar permissões de veículos.", "error");
+    return;
+  }
+
+  // Mapa: veiculo_id -> Set(funcionario_id)
+  const mapa = new Map();
+  (perms || []).forEach(p => {
+    if (!mapa.has(p.veiculo_id)) mapa.set(p.veiculo_id, new Set());
+    mapa.get(p.veiculo_id).add(p.funcionario_id);
+  });
+
+  // Regra: se veículo não tem entrada no mapa => livre
+  // se tem => só aparece se funcionario.id estiver permitido
+  const filtrados = (veiculos || []).filter(v => {
+    const set = mapa.get(v.id);
+    if (!set) return true; // livre
+    return set.has(funcionario.id); // restrito
+  });
+
   selectVeiculo.innerHTML = '<option value="">Selecione...</option>';
-  data.forEach(v => {
+  if (!filtrados.length) {
+    selectVeiculo.innerHTML += `<option value="" disabled>Nenhum veículo disponível para você</option>`;
+    return;
+  }
+
+  filtrados.forEach(v => {
     selectVeiculo.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
   });
 }
