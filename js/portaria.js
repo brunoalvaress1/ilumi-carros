@@ -49,9 +49,8 @@ function toInputDateTime(isoString) {
   if (!isoString) return "";
   const d = new Date(isoString);
   if (isNaN(d)) return "";
-  // ajustar timezone para caber no input datetime-local
   d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16); // yyyy-MM-ddTHH:mm
+  return d.toISOString().slice(0, 16);
 }
 
 function getMinDateTime() {
@@ -303,7 +302,7 @@ async function carregarReservas() {
         <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
         <td>${r.funcionario_nome ?? "-"}</td>
         <td>${formatarDataHoraBR(r.data_saida_prevista)}</td>
-        <td>${formatarDataHoraBR(r.data_retorno_prevista)}</td>
+        <td>${formatarDataHoraBR(r.data_retorno_previsto)}</td>
         <td>${r.status}</td>
         <td>
           <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarReserva('${r.id}')">Editar</button>
@@ -370,8 +369,9 @@ async function abrirModalNovaReserva() {
       <label class="form-label">Data/Hora Saída</label>
       <input id="res-saida" type="datetime-local" class="form-control mb-2" min="${getMinDateTime()}">
 
-      <label class="form-label">Data/Hora Retorno</label>
+      <label class="form-label">Data/Hora Retorno Prevista</label>  <!-- 🔹 NOVO: Campo de retorno -->
       <input id="res-retorno" type="datetime-local" class="form-control mb-2" min="${getMinDateTime()}">
+      <small class="text-muted">Deixe igual à saída para devolução no mesmo dia.</small>
 
       <label class="form-label">Motivo / Destino</label>
       <textarea id="res-motivo" class="form-control"></textarea>
@@ -388,35 +388,54 @@ async function abrirModalNovaReserva() {
 
 // Verificar conflito de horário ao criar reserva
 async function existeConflito(veiculo_id, saida, retorno, excludeId = null) {
+  console.log("Verificando conflito para veículo:", veiculo_id, "Saída:", saida, "Retorno:", retorno, "Excluir ID:", excludeId);
+
   let query = supa
     .from("reservas")
-    .select("data_saida_prevista, data_retorno_prevista, status")
+    .select("id, data_saida_prevista, data_retorno_prevista, status")
     .eq("veiculo_id", veiculo_id)
     .neq("status", "cancelada");
 
-  if (excludeId) query = query.neq("id", excludeId); // Ignora a reserva sendo editada
+  if (excludeId) {
+    const excludeIdNum = Number(excludeId);  // 🔹 Converte para number de forma robusta
+    query = query.neq("id", excludeIdNum);
+    console.log("Excluindo reserva ID (convertido para number):", excludeIdNum);
+  }
 
   const { data, error } = await query;
 
-  if (error) return false;
+  if (error) {
+    console.error("Erro na query de conflito:", error);
+    return false;
+  }
+
+  console.log("Reservas encontradas após exclusão:", data);
 
   const novaIni = new Date(saida).getTime();
   const novaFim = new Date(retorno).getTime();
 
   for (const r of data || []) {
     if (!r.data_saida_prevista || !r.data_retorno_prevista) continue;
+
     const ini = new Date(r.data_saida_prevista).getTime();
     const fim = new Date(r.data_retorno_prevista).getTime();
 
-    if (novaIni < fim && novaFim > ini) return true;
+    console.log("Comparando com reserva ID:", r.id, " (não deve ser a atual)", "Ini:", new Date(ini), "Fim:", new Date(fim));
+
+    // 🔹 Verifica sobreposição: evita falsos positivos se as datas forem idênticas
+    if (novaIni < fim && novaFim > ini) {
+      console.log("Conflito detectado com reserva ID:", r.id);
+      return true;
+    }
   }
 
+  console.log("Nenhum conflito real detectado.");
   return false;
 }
 
 async function salvarReserva() {
   const funcionario = document.getElementById("res-func").value;
-    const veiculo = document.getElementById("res-veic").value;
+  const veiculo = document.getElementById("res-veic").value;
   const saida = document.getElementById("res-saida").value;
   const retorno = document.getElementById("res-retorno").value;
   const motivo = document.getElementById("res-motivo").value.trim();
@@ -427,14 +446,14 @@ async function salvarReserva() {
   }
 
   const dSaida = new Date(saida);
-  const dRet = new Date(retorno);
+  const dRetorno = new Date(retorno);
   const agora = new Date();
 
   if (dSaida < agora) {
     Swal.fire("Atenção", "A data/hora de saída já passou.", "warning");
     return;
   }
-  if (dRet <= dSaida) {
+  if (dRetorno <= dSaida) {
     Swal.fire("Atenção", "O retorno deve ser após a saída.", "warning");
     return;
   }
@@ -445,11 +464,15 @@ async function salvarReserva() {
     return;
   }
 
+  // 🔹 CORREÇÃO: Converter para UTC (ISO string) para evitar offset de timezone
+  const saidaISO = dSaida.toISOString();
+  const retornoISO = dRetorno.toISOString();
+
   const { error } = await supa.from("reservas").insert({
     funcionario_id: funcionario,
     veiculo_id: veiculo,
-    data_saida_prevista: saida,
-    data_retorno_prevista: retorno,
+    data_saida_prevista: saidaISO,  // 🔹 Usar ISO
+    data_retorno_previsto: retornoISO,  // 🔹 Usar ISO
     motivo,
     status: "aberta",
   });
@@ -501,7 +524,6 @@ async function abrirModalEditarReserva(id) {
       <button class="btn-close" data-bs-dismiss="modal"></button>
     </div>
     <div class="modal-body">
-
       <label class="form-label">Funcionário</label>
       <select id="edit-res-func" class="form-select mb-2">${optFunc}</select>
 
@@ -514,7 +536,7 @@ async function abrirModalEditarReserva(id) {
 
       <label class="form-label">Data/Hora Retorno Prevista</label>
       <input id="edit-res-ret-prev" type="datetime-local" class="form-control mb-2"
-             value="${toInputDateTime(reserva.data_retorno_prevista)}">
+             value="${toInputDateTime(reserva.data_retorno_previsto)}">
 
       <label class="form-label">Data/Hora Saída Real</label>
       <input id="edit-res-saida-real" type="datetime-local" class="form-control mb-2"
@@ -532,7 +554,6 @@ async function abrirModalEditarReserva(id) {
 
       <label class="form-label">Motivo / Destino</label>
       <textarea id="edit-res-motivo" class="form-control mb-2">${reserva.motivo ?? ""}</textarea>
-
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
@@ -551,7 +572,7 @@ async function salvarEdicaoReserva(id) {
     const funcionario_id = document.getElementById("edit-res-func")?.value;
     const veiculo_id = document.getElementById("edit-res-veic")?.value;
     const data_saida_prevista = document.getElementById("edit-res-saida-prev")?.value || null;
-    const data_retorno_prevista = document.getElementById("edit-res-ret-prev")?.value || null;
+    const data_retorno_previsto = document.getElementById("edit-res-ret-prev")?.value || null;
     const data_saida_real = document.getElementById("edit-res-saida-real")?.value || null;
     const data_retorno_real = document.getElementById("edit-res-ret-real")?.value || null;
     const km_inicio = document.getElementById("edit-res-km-inicio")?.value ? Number(document.getElementById("edit-res-km-inicio").value) : null;
@@ -564,7 +585,7 @@ async function salvarEdicaoReserva(id) {
     }
 
     const dSaidaPrev = data_saida_prevista ? new Date(data_saida_prevista) : null;
-    const dRetPrev = data_retorno_prevista ? new Date(data_retorno_prevista) : null;
+    const dRetPrev = data_retorno_previsto ? new Date(data_retorno_previsto) : null;
     if (dSaidaPrev && dRetPrev && dRetPrev <= dSaidaPrev) {
       Swal.fire("Erro", "Retorno previsto deve ser após saída.", "error");
       return;
@@ -582,25 +603,32 @@ async function salvarEdicaoReserva(id) {
       return;
     }
 
-    if (veiculo_id && data_saida_prevista && data_retorno_prevista) {
-      const conflito = await existeConflito(veiculo_id, data_saida_prevista, data_retorno_prevista, id);
+    if (veiculo_id && data_saida_prevista && data_retorno_previsto) {
+      const conflito = await existeConflito(veiculo_id, data_saida_prevista, data_retorno_previsto, id);
       if (conflito) {
         Swal.fire("Erro", "Conflito de horário com outra reserva.", "error");
         return;
       }
     }
 
-    const updates = {
-      funcionario_id,
-      veiculo_id,
-      data_saida_prevista,
-      data_retorno_prevista,
-      data_saida_real,
-      data_retorno_real,
-      km_inicio,
-      km_fim,
-      motivo
-    };
+// 🔹 Dentro de salvarEdicaoReserva, após as validações e antes do updates
+// 🔹 Dentro de salvarEdicaoReserva, após as validações e antes do updates
+const saidaPrevISO = dSaidaPrev ? dSaidaPrev.toISOString() : null;
+const retornoPrevISO = dRetPrev ? dRetPrev.toISOString() : null;  // 🔹 Converte retorno previsto para UTC
+const saidaRealISO = dSaidaReal ? dSaidaReal.toISOString() : null;
+const retornoRealISO = dRetReal ? dRetReal.toISOString() : null;
+
+const updates = {
+  funcionario_id,
+  veiculo_id,
+  data_saida_prevista: saidaPrevISO,
+  data_retorno_previsto: retornoPrevISO,  // 🔹 Usa ISO para evitar offset
+  data_saida_real: saidaRealISO,
+  data_retorno_real: retornoRealISO,
+  km_inicio,
+  km_fim,
+  motivo
+};
 
     console.log("Updates enviados:", updates);
     const { error } = await supa.from("reservas").update(updates).eq("id", id);
@@ -783,20 +811,21 @@ async function carregarUsuarios() {
 
   tbody.innerHTML = "";
   data.forEach(f => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${f.nome}</td>
-        <td>${f.email}</td>
-        <td>${f.ativo ? "Sim" : "Não"}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarUsuario('${f.id}')">Editar</button>
-          <button class="btn btn-sm btn-outline-${f.ativo ? "danger" : "success"}"
-            onclick="alternarStatusUsuario('${f.id}', ${f.ativo})">
-            ${f.ativo ? "Desativar" : "Ativar"}
-          </button>
-        </td>
-      </tr>`;
-  });
+  tbody.innerHTML += `
+    <tr>
+      <td>${f.nome}</td>
+      <td>${f.email}</td>
+      <td>${f.ativo ? "Sim" : "Não"}</td>
+      <td>
+        <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarUsuario('${f.id}')">Editar</button>
+        <button class="btn btn-sm btn-outline-${f.ativo ? "danger" : "success"}"
+          onclick="alternarStatusUsuario('${f.id}', ${f.ativo})">
+          ${f.ativo ? "Desativar" : "Ativar"}
+        </button>
+        <button class="btn btn-sm btn-outline-danger" onclick="excluirFuncionario('${f.id}')">Excluir</button>  <!-- 🔹 Novo botão -->
+      </td>
+    </tr>`;
+});
 }
 
 function abrirModalNovoFuncionario() {
@@ -933,4 +962,36 @@ function verFoto(path) {
   } else {
     Swal.fire("Erro", "Foto não encontrada ou bucket não público.", "error");
   }
+}
+
+
+
+
+
+
+async function excluirFuncionario(id) {
+  const confirmar = await Swal.fire({
+    title: "Excluir funcionário?",
+    text: "Esta ação removerá permanentemente o funcionário e pode afetar reservas associadas.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, excluir",
+    cancelButtonText: "Cancelar"
+  });
+
+  if (!confirmar.isConfirmed) return;
+
+  const { error } = await supa
+    .from("funcionarios")
+    .delete()
+    .eq("id", id);
+
+  if (error) {
+    Swal.fire("Erro", "Falha ao excluir funcionário.", "error");
+    console.error(error);
+    return;
+  }
+
+  Swal.fire("Excluído!", "Funcionário removido com sucesso.", "success");
+  carregarUsuarios();
 }

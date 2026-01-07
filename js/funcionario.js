@@ -2,11 +2,13 @@
 // FUNCIONÁRIO – ILUMI SISTEMA DE VEÍCULOS
 // ------------------------------------------------------------
 
+// Estado da reserva (MODIFICADO: Adicionado dataRetorno)
 const estadoReservaFuncionario = {
   veiculoId: null,
-  data: null,         // yyyy-MM-dd
-  saida: null,        // Date
-  retorno: null,      // Date
+  data: null,         // yyyy-MM-dd (data de saída)
+  dataRetorno: null,  // NOVO: yyyy-MM-dd (data de retorno)
+  saida: null,        // Date (horário de saída)
+  retorno: null,      // Date (horário de retorno)
   intervalosBloqueados: [] // {inicio: Date, fim: Date}
 };
 
@@ -26,8 +28,11 @@ document.addEventListener('DOMContentLoaded', () => {
   // Eventos para atualizar grade de horários
   const selVeic = document.getElementById("reserva-veiculo");
   const inputData = document.getElementById("reserva-data");
+  // NOVO: Listener para data de retorno
+  const inputDataRetorno = document.getElementById("reserva-data-retorno");
   if (selVeic) selVeic.addEventListener("change", onFiltroHorarioChange);
   if (inputData) inputData.addEventListener("change", onFiltroHorarioChange);
+  if (inputDataRetorno) inputDataRetorno.addEventListener("change", onFiltroHorarioChange);
 });
 
 // ------------------------------------------------------------
@@ -77,11 +82,17 @@ function formatarDataHoraBR(iso) {
 // BLOQUEIOS (30 MIN ANTES / 1H DEPOIS)
 // ------------------------------------------------------------
 async function obterIntervalosBloqueados(veiculoId) {
+  // MODIFICADO: Buscar reservas que sobreponham o período (saída a retorno)
+  const dataSaida = estadoReservaFuncionario.data;
+  const dataRetorno = estadoReservaFuncionario.dataRetorno;
+  if (!dataSaida || !dataRetorno) return [];
+
   const { data, error } = await supa
     .from("reservas")
     .select("data_saida_prevista, data_retorno_previsto, data_retorno_real, status")
     .eq("veiculo_id", veiculoId)
-    .neq("status", "cancelada");
+    .neq("status", "cancelada")
+    .or(`and(data_saida_prevista.lte.${dataRetorno}T23:59,data_retorno_previsto.gte.${dataSaida}T00:00)`);  // Overlap no período
 
   if (error) {
     console.error("Erro ao buscar intervalos bloqueados:", error);
@@ -154,9 +165,12 @@ async function carregarVeiculosDisponiveis() {
 async function onFiltroHorarioChange() {
   const veiculoId = document.getElementById("reserva-veiculo").value;
   const dataReserva = document.getElementById("reserva-data").value; // yyyy-MM-dd
+  // NOVO: Capturar data de retorno
+  const dataReservaRetorno = document.getElementById("reserva-data-retorno").value;
 
   estadoReservaFuncionario.veiculoId = veiculoId || null;
   estadoReservaFuncionario.data = dataReserva || null;
+  estadoReservaFuncionario.dataRetorno = dataReservaRetorno || null;  // NOVO
   estadoReservaFuncionario.saida = null;
   estadoReservaFuncionario.retorno = null;
   estadoReservaFuncionario.intervalosBloqueados = [];
@@ -168,9 +182,9 @@ async function onFiltroHorarioChange() {
   // Reset grade de retorno
   limparGradeRetorno("Escolha primeiro o horário de saída.");
 
-  if (!veiculoId || !dataReserva) {
+  if (!veiculoId || !dataReserva || !dataReservaRetorno) {  // MODIFICADO: Verificar ambas datas
     const gradeSaida = document.getElementById("grade-saida");
-    gradeSaida.innerHTML = `<span class="slot-legenda">Selecione o veículo e a data.</span>`;
+    gradeSaida.innerHTML = `<span class="slot-legenda">Selecione o veículo e as datas.</span>`;
     return;
   }
 
@@ -186,9 +200,9 @@ function montarGradeSaida() {
   const gradeSaida = document.getElementById("grade-saida");
   gradeSaida.innerHTML = "";
 
-  const { data, intervalosBloqueados } = estadoReservaFuncionario;
-  if (!data) {
-    gradeSaida.innerHTML = `<span class="slot-legenda">Selecione o veículo e a data.</span>`;
+  const { data, dataRetorno, intervalosBloqueados } = estadoReservaFuncionario;  // MODIFICADO: Incluir dataRetorno
+  if (!data || !dataRetorno) {
+    gradeSaida.innerHTML = `<span class="slot-legenda">Selecione o veículo e as datas.</span>`;
     return;
   }
 
@@ -205,9 +219,13 @@ function montarGradeSaida() {
     if (slotFim <= agora) {
       disponivel = false;
     } else {
-      // Verifica se entra em algum intervalo bloqueado
+      // MODIFICADO: Verificar conflito no período inteiro (saída a retorno)
       for (const inter of intervalosBloqueados) {
-        if (slotInicio < inter.fim && slotFim > inter.inicio) {
+        const periodoReserva = {
+          inicio: new Date(`${data}T${slotInicio.toTimeString().slice(0, 5)}`),
+          fim: new Date(`${dataRetorno}T${slotFim.toTimeString().slice(0, 5)}`)
+        };
+        if (periodoReserva.inicio < inter.fim && periodoReserva.fim > inter.inicio) {
           disponivel = false;
           break;
         }
@@ -241,13 +259,13 @@ function montarGradeRetorno() {
   const gradeRet = document.getElementById("grade-retorno");
   gradeRet.innerHTML = "";
 
-  const { data, intervalosBloqueados, saida } = estadoReservaFuncionario;
-  if (!data || !saida) {
+  const { data, dataRetorno, intervalosBloqueados, saida } = estadoReservaFuncionario;  // MODIFICADO: Incluir dataRetorno
+  if (!data || !dataRetorno || !saida) {
     limparGradeRetorno("Escolha primeiro o horário de saída.");
     return;
   }
 
-  const base = new Date(`${data}T00:00:00`);
+  const base = new Date(`${dataRetorno}T00:00:00`);  // MODIFICADO: Usar dataRetorno
 
   for (let i = 0; i < 48; i++) {
     const slotInicio = new Date(base.getTime() + i * 30 * 60 * 1000);
@@ -255,7 +273,7 @@ function montarGradeRetorno() {
 
     let disponivel = true;
 
-    // Retorno deve ser DEPOIS da saída
+    // MODIFICADO: Retorno deve ser DEPOIS da saída (mesmo em dias diferentes)
     if (slotInicio <= saida) {
       disponivel = false;
     } else {
@@ -320,7 +338,8 @@ function selecionarHorarioRetorno(dateObj, spanEl) {
   });
   spanEl.classList.add("selecionado");
 
-  const data = estadoReservaFuncionario.data;
+  // MODIFICADO: Usar dataRetorno
+  const data = estadoReservaFuncionario.dataRetorno;
   const hhmm = spanEl.textContent;
   document.getElementById("reserva-retorno").value = `${data}T${hhmm}`;
 }
@@ -335,17 +354,28 @@ function configurarFormReserva() {
     e.preventDefault();
 
     const veiculo = document.getElementById("reserva-veiculo").value;
+    const dataSaida = document.getElementById("reserva-data").value;
+    const dataRetorno = document.getElementById("reserva-data-retorno").value;  // NOVO
     const saida = document.getElementById("reserva-saida").value;
     const retorno = document.getElementById("reserva-retorno").value;
     const motivo = document.getElementById("reserva-motivo").value.trim();
     const email = sessionStorage.getItem("ilumiUserEmail");
 
-    if (!veiculo || !saida || !retorno || !motivo) {
-      Swal.fire("Atenção", "Selecione veículo, data, horários e motivo.", "warning");
+    // MODIFICADO: Validações para datas
+    if (!veiculo || !dataSaida || !dataRetorno || !saida || !retorno || !motivo) {
+      Swal.fire("Atenção", "Selecione veículo, datas, horários e motivo.", "warning");
       return;
     }
 
-    if (new Date(retorno) <= new Date(saida)) {
+    const dSaida = new Date(saida);
+    const dRetorno = new Date(retorno);
+    const agora = new Date();
+
+    if (dSaida < agora) {
+      Swal.fire("Atenção", "A data/hora de saída já passou.", "warning");
+      return;
+    }
+    if (dRetorno <= dSaida) {
       Swal.fire("Atenção", "O retorno deve ser após a saída.", "warning");
       return;
     }
@@ -389,7 +419,7 @@ function configurarFormReserva() {
     // Limpa estado e grades
     estadoReservaFuncionario.saida = null;
     estadoReservaFuncionario.retorno = null;
-    document.getElementById("grade-saida").innerHTML = `<span class="slot-legenda">Selecione o veículo e a data.</span>`;
+    document.getElementById("grade-saida").innerHTML = `<span class="slot-legenda">Selecione o veículo e as datas.</span>`;
     limparGradeRetorno("Escolha primeiro o horário de saída.");
 
     carregarMinhasReservas();
@@ -408,7 +438,7 @@ async function carregarMinhasReservas() {
     const email = sessionStorage.getItem("ilumiUserEmail");
     console.log("E-mail do usuário:", email);
 
-    if (!email) {
+        if (!email) {
       tbody.innerHTML = '<tr><td colspan="4">Erro: Usuário não logado.</td></tr>';
       return;
     }
@@ -453,12 +483,18 @@ async function carregarMinhasReservas() {
 
     tbody.innerHTML = "";
     data.forEach(r => {
+      const status = r.status;
+      const podeCancelar = status === "aberta";  // Só permite cancelar se aberta
+
       tbody.innerHTML += `
         <tr>
           <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
           <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
           <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
-          <td>${r.status}</td>
+          <td>${status}</td>
+          <td>
+            ${podeCancelar ? `<button class="btn btn-sm btn-outline-warning" onclick="cancelarReserva('${r.id}')">Cancelar</button>` : "-"}
+          </td>
         </tr>
       `;
     });
@@ -471,7 +507,7 @@ async function carregarMinhasReservas() {
   }
 }
 
-/// ------------------------------------------------------------
+// ------------------------------------------------------------
 // CHECK-IN / CHECK-OUT (SEPARADOS)
 // ------------------------------------------------------------
 function configurarCheckinCheckout() {
@@ -566,26 +602,26 @@ async function fazerCheck(tipo) {
   }
 
   const safeName = foto.name.replace(/[^\w.\-]/g, "_");
-const email = sessionStorage.getItem("ilumiUserEmail");
-const timestamp = Date.now();
-const path = `${email}/${reservaId}/${tipo}-${timestamp}-${safeName}`;
+  const email = sessionStorage.getItem("ilumiUserEmail");
+  const timestamp = Date.now();
+  const path = `${email}/${reservaId}/${tipo}-${timestamp}-${safeName}`;
 
-console.log("Tentando upload para path:", path, "Arquivo:", foto.name);
+  console.log("Tentando upload para path:", path, "Arquivo:", foto.name);
 
-const { error: uploadError } = await supa
-  .storage
-  .from("painel-fotos")
-  .upload(path, foto);
+  const { error: uploadError } = await supa
+    .storage
+    .from("painel-fotos")
+    .upload(path, foto);
 
-console.log("Upload erro:", uploadError);
+  console.log("Upload erro:", uploadError);
 
-if (uploadError) {
-  console.error("Erro no upload:", uploadError);
-  Swal.fire("Erro", "Não foi possível enviar a foto.", "error");
-  return;
-}
+  if (uploadError) {
+    console.error("Erro no upload:", uploadError);
+    Swal.fire("Erro", "Não foi possível enviar a foto.", "error");
+    return;
+  }
 
-console.log("Upload bem-sucedido, path salvo:", path);
+  console.log("Upload bem-sucedido, path salvo:", path);
 
   const agora = new Date().toISOString();
   let updates = {};
@@ -656,4 +692,31 @@ console.log("Upload bem-sucedido, path salvo:", path);
   carregarMinhasReservas();
   carregarReservasCheckin();
   carregarReservasCheckout();
+}
+
+async function cancelarReserva(id) {
+  const confirmar = await Swal.fire({
+    title: "Cancelar reserva?",
+    text: "Esta ação marcará a reserva como cancelada. Não poderá ser revertida.",
+    icon: "warning",
+    showCancelButton: true,
+    confirmButtonText: "Sim, cancelar",
+    cancelButtonText: "Cancelar"
+  });
+
+  if (!confirmar.isConfirmed) return;
+
+  const { error } = await supa
+    .from("reservas")
+    .update({ status: "cancelada" })
+    .eq("id", id);
+
+  if (error) {
+    Swal.fire("Erro", "Falha ao cancelar reserva.", "error");
+    console.error(error);
+    return;
+  }
+
+  Swal.fire("Cancelada!", "Reserva cancelada com sucesso.", "success");
+  carregarMinhasReservas();  // Recarrega a tabela
 }

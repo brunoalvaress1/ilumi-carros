@@ -59,6 +59,13 @@
                 <input type="date" id="reserva-data" class="form-control" required>
               </div>
 
+         
+<div class="mb-3">
+  <label class="form-label">Data de retorno prevista</label>
+  <input type="date" id="reserva-data-retorno" class="form-control" required>
+  <small class="text-muted">Deixe igual à data de saída para devolução no mesmo dia.</small>
+</div>
+
               <div class="mb-3">
                 <label class="form-label d-flex align-items-center gap-1">
                   Horário de saída
@@ -189,6 +196,7 @@
                     <th>Saída</th>
                     <th>Retorno</th>
                     <th>Status</th>
+                    <th>Ações</th>
                   </tr>
                 </thead>
                 <tbody id="tabela-minhas-reservas"></tbody>
