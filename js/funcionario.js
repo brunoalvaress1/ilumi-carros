@@ -142,9 +142,24 @@ async function existeConflito(veiculo_id, saida, retorno) {
 async function carregarVeiculosDisponiveis() {
   const selectVeiculo = document.getElementById("reserva-veiculo");
 
+  const email = sessionStorage.getItem("ilumiUserEmail");
+
+  // Buscar ID do funcionário
+  const { data: funcionario } = await supa
+    .from("funcionarios")
+    .select("id")
+    .eq("email", email)
+    .maybeSingle();
+
+  if (!funcionario) return;
+
+  // 🔹 Query corrigida: Left join para incluir veículos sem permissões
   const { data, error } = await supa
     .from("veiculos")
-    .select("*")
+    .select(`
+      *,
+      veiculo_funcionarios(funcionario_id)
+    `)
     .eq("status", "disponivel")
     .order("modelo");
 
@@ -153,8 +168,16 @@ async function carregarVeiculosDisponiveis() {
     return;
   }
 
+  // 🔹 Filtrar no client-side: Veículos públicos OU autorizados
+  const veiculosFiltrados = data.filter(v => {
+    if (!v.veiculo_funcionarios || v.veiculo_funcionarios.length === 0) {
+      return true; // Veículo público (sem restrições)
+    }
+    return v.veiculo_funcionarios.some(perm => perm.funcionario_id === funcionario.id); // Autorizado
+  });
+
   selectVeiculo.innerHTML = '<option value="">Selecione...</option>';
-  data.forEach(v => {
+  veiculosFiltrados.forEach(v => {
     selectVeiculo.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
   });
 }
@@ -355,20 +378,26 @@ function configurarFormReserva() {
 
     const veiculo = document.getElementById("reserva-veiculo").value;
     const dataSaida = document.getElementById("reserva-data").value;
-    const dataRetorno = document.getElementById("reserva-data-retorno").value;  // NOVO
-    const saida = document.getElementById("reserva-saida").value;
-    const retorno = document.getElementById("reserva-retorno").value;
+    const dataRetorno = document.getElementById("reserva-data-retorno").value;
+
+    // hidden inputs (montados ao clicar nos slots)
+    const saidaLocal = document.getElementById("reserva-saida").value;     // "YYYY-MM-DDTHH:mm"
+    const retornoLocal = document.getElementById("reserva-retorno").value; // "YYYY-MM-DDTHH:mm"
+
     const motivo = document.getElementById("reserva-motivo").value.trim();
     const email = sessionStorage.getItem("ilumiUserEmail");
 
-    // MODIFICADO: Validações para datas
-    if (!veiculo || !dataSaida || !dataRetorno || !saida || !retorno || !motivo) {
+    if (!veiculo || !dataSaida || !dataRetorno || !saidaLocal || !retornoLocal || !motivo) {
       Swal.fire("Atenção", "Selecione veículo, datas, horários e motivo.", "warning");
       return;
     }
 
-    const dSaida = new Date(saida);
-    const dRetorno = new Date(retorno);
+    // Converte os valores do input (hora local) para Date e salva em UTC (ISO)
+    const saidaISO = new Date(saidaLocal).toISOString();
+    const retornoISO = new Date(retornoLocal).toISOString();
+
+    const dSaida = new Date(saidaISO);
+    const dRetorno = new Date(retornoISO);
     const agora = new Date();
 
     if (dSaida < agora) {
@@ -380,31 +409,33 @@ function configurarFormReserva() {
       return;
     }
 
-    // Verificação final de conflito (blindagem extra)
-    const conflito = await existeConflito(veiculo, saida, retorno);
+    // Blindagem extra: conflito no período inteiro
+    const conflito = await existeConflito(veiculo, saidaISO, retornoISO);
     if (conflito) {
       Swal.fire("Indisponível", "Este horário foi ocupado enquanto você selecionava.", "error");
       return;
     }
 
-    const { data: funcionario } = await supa
+    // Busca o ID do funcionário logado
+    const { data: funcionario, error: funcError } = await supa
       .from("funcionarios")
       .select("id")
       .eq("email", email)
       .maybeSingle();
 
-    if (!funcionario) {
+    if (funcError || !funcionario) {
       Swal.fire("Erro", "Seu usuário não foi encontrado.", "error");
       return;
     }
 
+    // Salva a reserva no banco (UTC ISO)
     const { error } = await supa.from("reservas").insert({
       veiculo_id: veiculo,
       funcionario_id: funcionario.id,
-      data_saida_prevista: saida,
-      data_retorno_previsto: retorno,
+      data_saida_prevista: saidaISO,
+      data_retorno_previsto: retornoISO,
       motivo,
-      status: "aberta"
+      status: "aberta",
     });
 
     if (error) {
@@ -416,10 +447,20 @@ function configurarFormReserva() {
     Swal.fire("Sucesso!", "Reserva criada com sucesso.", "success");
     form.reset();
 
-    // Limpa estado e grades
+    // Limpa estado e grades (mantém padrão do seu arquivo)
     estadoReservaFuncionario.saida = null;
     estadoReservaFuncionario.retorno = null;
-    document.getElementById("grade-saida").innerHTML = `<span class="slot-legenda">Selecione o veículo e as datas.</span>`;
+    estadoReservaFuncionario.veiculoId = null;
+    estadoReservaFuncionario.data = null;
+    estadoReservaFuncionario.dataRetorno = null;
+    estadoReservaFuncionario.intervalosBloqueados = [];
+
+    document.getElementById("reserva-saida").value = "";
+    document.getElementById("reserva-retorno").value = "";
+
+    const gradeSaida = document.getElementById("grade-saida");
+    if (gradeSaida) gradeSaida.innerHTML = `<span class="slot-legenda">Selecione o veículo e as datas.</span>`;
+
     limparGradeRetorno("Escolha primeiro o horário de saída.");
 
     carregarMinhasReservas();
