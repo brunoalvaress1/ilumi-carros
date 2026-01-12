@@ -13,6 +13,13 @@ const estadoReservaFuncionario = {
 };
 
 document.addEventListener('DOMContentLoaded', () => {
+
+  setInterval(() => {
+  carregarMinhasReservas();
+  carregarReservasCheckin();
+  carregarReservasCheckout();
+}, 10000); // 1,5 segundos
+
   protegerRota('funcionario');
   carregarUsuario();
   carregarVeiculosDisponiveis();
@@ -446,6 +453,10 @@ function configurarFormReserva() {
 
     Swal.fire("Sucesso!", "Reserva criada com sucesso.", "success");
     form.reset();
+
+    carregarMinhasReservas();
+    carregarReservasCheckin();
+    carregarReservasCheckout();
 
     // Limpa estado e grades (mantém padrão do seu arquivo)
     estadoReservaFuncionario.saida = null;

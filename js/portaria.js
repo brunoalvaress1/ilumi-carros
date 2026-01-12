@@ -3,6 +3,13 @@
 // ------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
+
+  setInterval(() => {
+  carregarReservas();
+  carregarHistorico();
+  carregarVeiculos();
+}, 10000);
+
   protegerRota("portaria");
   configurarMenu();
   carregarUsuario();
@@ -731,9 +738,13 @@ async function carregarHistorico() {
         <td>${r.km_inicio ?? "-"}</td>
         <td>${r.km_fim ?? "-"}</td>
         <td>
-          ${r.foto_painel_inicio ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_inicio}')">Ver</button>` : "-"}
-          ${r.foto_painel_fim ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_fim}')">Ver</button>` : "-"}
-        </td>
+  ${r.foto_painel_inicio
+    ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_inicio}')">Início</button>`
+    : "-"}
+  ${r.foto_painel_fim
+    ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_fim}')">Fim</button>`
+    : "-"}
+</td>
         <td>
   <button class="btn btn-sm btn-outline-danger" onclick="excluirReserva('${r.id}')">
     Excluir
@@ -764,8 +775,12 @@ async function carregarHistoricoFiltros() {
   });
 }
 
-function verFoto(url) {
-  window.open(url, "_blank");
+function verFoto(path) {
+  const clean = (path || "").trim();
+  if (!clean) return;
+
+  const { data } = supa.storage.from("painel-fotos").getPublicUrl(clean);
+  window.open(data.publicUrl, "_blank");
 }
 
 // ------------------------------------------------------------
