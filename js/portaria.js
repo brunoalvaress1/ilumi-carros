@@ -779,8 +779,24 @@ function verFoto(path) {
   const clean = (path || "").trim();
   if (!clean) return;
 
-  const { data } = supa.storage.from("painel-fotos").getPublicUrl(clean);
-  window.open(data.publicUrl, "_blank");
+  const res = supa.storage.from("painel-fotos").getPublicUrl(clean);
+
+  // Compatível com supabase-js v2 e v1
+  const url =
+    res?.data?.publicUrl ||   // v2
+    res?.publicURL ||         // v1
+    res?.data?.publicURL;     // algumas variações
+
+  console.log("PATH:", clean);
+  console.log("getPublicUrl retorno:", res);
+  console.log("URL final:", url);
+
+  if (!url) {
+    Swal.fire("Erro", "Não foi possível gerar a URL da foto.", "error");
+    return;
+  }
+
+  window.open(url, "_blank");
 }
 
 // ------------------------------------------------------------
