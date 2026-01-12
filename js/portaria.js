@@ -779,23 +779,13 @@ function verFoto(path) {
   const clean = (path || "").trim();
   if (!clean) return;
 
-  const res = supa.storage.from("painel-fotos").getPublicUrl(clean);
+  // usa a URL do seu projeto Supabase (a mesma do supabaseClient.js)
+  const supabaseUrl = "https://awlylgtadbljkjgbneds.supabase.co";
 
-  // Compatível com supabase-js v2 e v1
-  const url =
-    res?.data?.publicUrl ||   // v2
-    res?.publicURL ||         // v1
-    res?.data?.publicURL;     // algumas variações
+  // bucket público
+  const url = `${supabaseUrl}/storage/v1/object/public/painel-fotos/${encodeURI(clean)}`;
 
-  console.log("PATH:", clean);
-  console.log("getPublicUrl retorno:", res);
-  console.log("URL final:", url);
-
-  if (!url) {
-    Swal.fire("Erro", "Não foi possível gerar a URL da foto.", "error");
-    return;
-  }
-
+  console.log("Abrindo foto:", url);
   window.open(url, "_blank");
 }
 
