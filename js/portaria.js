@@ -412,47 +412,32 @@ async function abrirModalNovaReserva() {
   new bootstrap.Modal("#modalReserva").show();
 }
 
-async function existeConflito(veiculo_id, saida, retorno, excludeId = null) {
-  console.log("Verificando conflito para veículo:", veiculo_id, "Saída:", saida, "Retorno:", retorno, "Excluir ID:", excludeId);
-
+async function existeConflito(veiculo_id, saidaISO, retornoISO, excludeId = null) {
   let query = supa
     .from("reservas")
-    .select("id, data_saida_prevista, data_retorno_previsto, status")
+    .select("id, data_saida_prevista, data_retorno_prevista, data_saida_real, data_retorno_real, status")
     .eq("veiculo_id", veiculo_id)
     .neq("status", "cancelada");
 
-  if (excludeId) {
-    query = query.neq("id", excludeId);
-    console.log("Excluindo reserva ID:", excludeId);
-  }
+  if (excludeId) query = query.neq("id", excludeId);
 
   const { data, error } = await query;
+  if (error) return false;
 
-  if (error) {
-    console.error("Erro na query de conflito:", error);
-    return false;
-  }
-
-  console.log("Reservas encontradas após exclusão:", data);
-
-  const novaIni = new Date(saida).getTime();
-  const novaFim = new Date(retorno).getTime();
+  const novaIni = new Date(saidaISO).getTime();
+  const novaFim = new Date(retornoISO).getTime();
 
   for (const r of data || []) {
-    if (!r.data_saida_prevista || !r.data_retorno_previsto) continue;
+    const iniStr = r.data_saida_real || r.data_saida_prevista;
+    const fimStr = r.data_retorno_real || r.data_retorno_prevista;
+    if (!iniStr || !fimStr) continue;
 
-    const ini = new Date(r.data_saida_prevista).getTime();
-    const fim = new Date(r.data_retorno_previsto).getTime();
+    const ini = new Date(iniStr).getTime();
+    const fim = new Date(fimStr).getTime();
 
-    console.log("Comparando com reserva ID:", r.id, "Ini:", new Date(ini), "Fim:", new Date(fim));
-
-    if (novaIni < fim && novaFim > ini) {
-            console.log("Conflito detectado com reserva ID:", r.id);
-      return true;
-    }
+    if (novaIni < fim && novaFim > ini) return true;
   }
 
-  console.log("Nenhum conflito detectado.");
   return false;
 }
 
