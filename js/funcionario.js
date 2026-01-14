@@ -18,7 +18,7 @@ document.addEventListener('DOMContentLoaded', () => {
   carregarMinhasReservas();
   carregarReservasCheckin();
   carregarReservasCheckout();
-}, 10000); // 1,5 segundos
+}, 400000); // 1,5 segundos
 
   protegerRota('funcionario');
   carregarUsuario();
