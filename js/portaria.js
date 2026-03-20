@@ -8,7 +8,7 @@ document.addEventListener("DOMContentLoaded", () => {
   carregarReservas();
   carregarHistorico();
   carregarVeiculos();
-}, 10000);
+});
 
   protegerRota("portaria");
   configurarMenu();
