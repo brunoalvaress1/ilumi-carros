@@ -4,7 +4,10 @@
 
 document.addEventListener("DOMContentLoaded", () => {
 
- 
+  setInterval(() => {
+  carregarReservas();
+  carregarVeiculos();
+}, 400000);
 
   protegerRota("portaria");
   configurarMenu();
