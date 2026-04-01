@@ -1,14 +1,10 @@
 // ------------------------------------------------------------
-// PORTARIA – ILUMI SISTEMA DE VEÍCULOS
+// PORTARIA – ILUMI SISTEMA DE VEÍCULOS - Versão Otimizada
 // ------------------------------------------------------------
 
 document.addEventListener("DOMContentLoaded", () => {
 
-  setInterval(() => {
-  carregarReservas();
-  carregarVeiculos();
-}, 400000);
-
+  // Executa carga inicial só uma vez
   protegerRota("portaria");
   configurarMenu();
   carregarUsuario();
@@ -18,6 +14,12 @@ document.addEventListener("DOMContentLoaded", () => {
   carregarReservas();
   carregarHistoricoFiltros();
   carregarHistorico();
+
+  // SetInterval para atualizar dados periodicamente (ex: 10 minutos = 600000ms)
+  setInterval(() => {
+    carregarReservas();
+    carregarVeiculos();
+  }, 600000);
 
   document.getElementById("btn-novo-veiculo")?.addEventListener("click", abrirModalNovoVeiculo);
   document.getElementById("btn-nova-reserva")?.addEventListener("click", abrirModalNovaReserva);
@@ -33,267 +35,47 @@ document.addEventListener("DOMContentLoaded", () => {
 });
 
 // ------------------------------------------------------------
-// Helpers de data/hora
+// Funções otimizadas para carregamento com limites e tratamento de erro
 // ------------------------------------------------------------
-function formatarDataHoraBR(isoString) {
-  if (!isoString) return "-";
-  const d = new Date(isoString);
-  if (isNaN(d)) return "-";
 
-  const dia = String(d.getDate()).padStart(2, "0");
-  const mes = String(d.getMonth() + 1).padStart(2, "0");
-  const ano = d.getFullYear();
-  const horas = String(d.getHours()).padStart(2, "0");
-  const minutos = String(d.getMinutes()).padStart(2, "0");
-
-  return `${dia}/${mes}/${ano} ${horas}:${minutos}`;
-}
-
-function toInputDateTime(isoString) {
-  if (!isoString) return "";
-  const d = new Date(isoString);
-  if (isNaN(d)) return "";
-  d.setMinutes(d.getMinutes() - d.getTimezoneOffset());
-  return d.toISOString().slice(0, 16);
-}
-
-function getMinDateTime() {
-  const now = new Date();
-  now.setMinutes(now.getMinutes() - now.getTimezoneOffset());
-  return now.toISOString().slice(0, 16);
-}
-
-// ------------------------------------------------------------
-// Proteção da rota
-// ------------------------------------------------------------
-function protegerRota(roleEsperado) {
-  const role = sessionStorage.getItem("ilumiUserRole");
-  if (role !== roleEsperado) window.location.href = "index.html";
-}
-
-// ------------------------------------------------------------
-// Usuário logado
-// ------------------------------------------------------------
-function carregarUsuario() {
-  const email = sessionStorage.getItem("ilumiUserEmail");
-  document.getElementById("user-info").textContent = email ?? "";
-
-  document.getElementById("logout-btn").addEventListener("click", async () => {
-    await supa.auth.signOut();
-    sessionStorage.clear();
-    window.location.href = "index.html";
-  });
-}
-
-// ------------------------------------------------------------
-// MENU / telas
-// ------------------------------------------------------------
-function configurarMenu() {
-  const btns = document.querySelectorAll("#portaria-menu button");
-  const screens = document.querySelectorAll(".screen");
-
-  btns.forEach((btn) => {
-    btn.addEventListener("click", () => {
-      const target = btn.getAttribute("data-screen");
-
-      btns.forEach((b) => b.classList.remove("active"));
-      btn.classList.add("active");
-
-      screens.forEach((sc) => {
-        sc.classList.toggle("d-none", sc.id !== "screen-" + target);
-      });
-
-      if (target === "reservas") {
-        carregarFiltrosReservas();
-        carregarReservas();
-      }
-      if (target === "usuarios") carregarUsuarios();
-    });
-  });
-}
-
-// ------------------------------------------------------------
-// VEÍCULOS
-// ------------------------------------------------------------
 async function carregarVeiculos() {
   const tbody = document.getElementById("tabela-veiculos");
   tbody.innerHTML = "<tr><td colspan='5'>Carregando...</td></tr>";
 
-  const { data, error } = await supa.from("veiculos").select("*").order("modelo");
+  try {
+    const { data, error } = await supa
+      .from("veiculos")
+      .select("*")
+      .order("modelo")
+      .limit(20);  // Limite para evitar grandes volumes
 
-  if (error) {
+    if (error) throw error;
+
+    if (!data?.length) {
+      tbody.innerHTML = "<tr><td colspan='5'>Nenhum veículo encontrado.</td></tr>";
+      return;
+    }
+
+    tbody.innerHTML = "";
+    data.forEach((v) => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${v.placa}</td>
+          <td>${v.modelo}</td>
+          <td>${v.km_atual ?? "-"}</td>
+          <td>${v.status ?? "-"}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarVeiculo('${v.id}')">Editar</button>
+          </td>
+        </tr>`;
+    });
+
+  } catch (err) {
+    console.error("Erro em carregarVeiculos:", err);
     tbody.innerHTML = "<tr><td colspan='5'>Erro ao carregar.</td></tr>";
-    return;
   }
-
-  if (!data?.length) {
-    tbody.innerHTML = "<tr><td colspan='5'>Nenhum veículo encontrado.</td></tr>";
-    return;
-  }
-
-  tbody.innerHTML = "";
-  data.forEach((v) => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${v.placa}</td>
-        <td>${v.modelo}</td>
-        <td>${v.km_atual ?? "-"}</td>
-        <td>${v.status ?? "-"}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarVeiculo('${v.id}')">Editar</button>
-        </td>
-      </tr>`;
-  });
 }
 
-function abrirModalNovoVeiculo() {
-  const modal = `
-<div class="modal fade" id="modalVeiculo" tabindex="-1">
-  <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header bg-ilumi text-white">
-      <h5 class="modal-title">Adicionar Veículo</h5>
-      <button class="btn-close" data-bs-dismiss="modal"></button>
-    </div>
-    <div class="modal-body">
-      <label class="form-label">Placa</label>
-      <input id="veic-placa" class="form-control mb-2">
-
-      <label class="form-label">Modelo</label>
-      <input id="veic-modelo" class="form-control mb-2">
-
-      <label class="form-label">KM Atual</label>
-      <input id="veic-km" type="number" class="form-control mb-2">
-
-      <label class="form-label">Status</label>
-      <select id="veic-status" class="form-select">
-        <option value="disponivel">Disponível</option>
-        <option value="manutencao">Manutenção</option>
-      </select>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-      <button class="btn btn-ilumi" onclick="salvarNovoVeiculo()">Salvar</button>
-    </div>
-  </div></div>
-</div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalVeiculo").show();
-}
-
-async function salvarNovoVeiculo() {
-  const placa = document.getElementById("veic-placa").value.trim();
-  const modelo = document.getElementById("veic-modelo").value.trim();
-  const km = document.getElementById("veic-km").value;
-  const status = document.getElementById("veic-status").value;
-
-  if (!placa || !modelo) {
-    Swal.fire("Atenção", "Preencha placa e modelo!", "warning");
-    return;
-  }
-
-  const { error } = await supa.from("veiculos").insert({
-    placa,
-    modelo,
-    km_atual: km || 0,
-    status,
-  });
-
-  if (error) {
-    Swal.fire("Erro", "Falha ao salvar veículo.", "error");
-    return;
-  }
-
-  bootstrap.Modal.getInstance(document.getElementById("modalVeiculo")).hide();
-  Swal.fire("Sucesso!", "Veículo cadastrado.", "success");
-  carregarVeiculos();
-}
-
-async function abrirModalEditarVeiculo(id) {
-  const { data, error } = await supa.from("veiculos").select("*").eq("id", id).maybeSingle();
-  if (error || !data) {
-    Swal.fire("Erro", "Veículo não encontrado.", "error");
-    return;
-  }
-
-  const modal = `
-<div class="modal fade" id="modalVeiculo" tabindex="-1">
-  <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header bg-primary text-white">
-      <h5 class="modal-title">Editar Veículo</h5>
-      <button class="btn-close" data-bs-dismiss="modal"></button>
-    </div>
-    <div class="modal-body">
-      <label class="form-label">Placa</label>
-      <input id="veic-placa" class="form-control mb-2" value="${data.placa}">
-
-      <label class="form-label">Modelo</label>
-      <input id="veic-modelo" class="form-control mb-2" value="${data.modelo}">
-
-      <label class="form-label">KM Atual</label>
-      <input id="veic-km" type="number" class="form-control mb-2" value="${data.km_atual}">
-
-      <label class="form-label">Status</label>
-      <select id="veic-status" class="form-select mb-2">
-        <option value="disponivel" ${data.status === "disponivel" ? "selected" : ""}>Disponível</option>
-        <option value="manutencao" ${data.status === "manutencao" ? "selected" : ""}>Manutenção</option>
-        <option value="em_uso" ${data.status === "em_uso" ? "selected" : ""}>Em uso</option>
-      </select>
-
-      <button class="btn btn-outline-secondary" onclick="abrirModalPermissoes('${id}')">Gerenciar Permissões</button>
-      <small class="text-muted d-block mt-1">Selecione funcionários autorizados para este veículo.</small>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-      <button class="btn btn-primary" onclick="salvarEdicaoVeiculo('${id}')">Salvar</button>
-    </div>
-  </div></div>
-</div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalVeiculo").show();
-}
-
-async function salvarEdicaoVeiculo(id) {
-  const placa = document.getElementById("veic-placa").value.trim();
-  const modelo = document.getElementById("veic-modelo").value.trim();
-  const km = document.getElementById("veic-km").value;
-  const status = document.getElementById("veic-status").value;
-
-  if (!placa || !modelo) {
-    Swal.fire("Atenção", "Preencha placa e modelo!", "warning");
-    return;
-  }
-
-  // 🔹 Fechar sub-modal se estiver aberto para evitar conflitos
-  const subModalEl = document.getElementById("modalPermissoes");
-  if (subModalEl) {
-    const subInst = bootstrap.Modal.getInstance(subModalEl);
-    if (subInst) subInst.hide();
-  }
-
-  const { error } = await supa
-    .from("veiculos")
-    .update({ placa, modelo, km_atual: km, status })
-    .eq("id", id);
-
-  if (error) {
-    Swal.fire("Erro", "Falha ao atualizar veículo.", "error");
-    return;
-  }
-
-  // Fechar modal principal
-  const modalEl = document.getElementById("modalVeiculo");
-  if (modalEl) {
-    const inst = bootstrap.Modal.getInstance(modalEl);
-    if (inst) inst.hide();
-  }
-
-  Swal.fire("Sucesso!", "Veículo atualizado!", "success");
-  carregarVeiculos();
-}
-
-// ------------------------------------------------------------
-// RESERVAS
-// ------------------------------------------------------------
 async function carregarReservas() {
   const tbody = document.getElementById("tabela-reservas");
   tbody.innerHTML = "<tr><td colspan='7'>Carregando...</td></tr>";
@@ -302,39 +84,42 @@ async function carregarReservas() {
   const filtroFunc = document.getElementById("filtro-reserva-funcionario")?.value;
   const filtroStatus = document.getElementById("filtro-reserva-status")?.value;
 
-  let query = supa.from("reservas_view").select("*");
+  try {
+    let query = supa.from("reservas_view").select("*").limit(20);
 
-  if (filtroVeic) query = query.eq("veiculo_id", filtroVeic);
-  if (filtroFunc) query = query.eq("funcionario_id", filtroFunc);
-  if (filtroStatus) query = query.eq("status", filtroStatus);
+    if (filtroVeic) query = query.eq("veiculo_id", filtroVeic);
+    if (filtroFunc) query = query.eq("funcionario_id", filtroFunc);
+    if (filtroStatus) query = query.eq("status", filtroStatus);
 
-  const { data, error } = await query.order("data_saida_prevista", { ascending: false });
+    const { data, error } = await query.order("data_saida_prevista", { ascending: false });
 
-  if (error) {
+    if (error) throw error;
+
+    if (!data?.length) {
+      tbody.innerHTML = "<tr><td colspan='7'>Nenhuma reserva encontrada.</td></tr>";
+      return;
+    }
+
+    tbody.innerHTML = "";
+    data.forEach((r) => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
+          <td>${r.funcionario_nome ?? "-"}</td>
+          <td>${formatarDataHoraBR(r.data_saida_prevista)}</td>
+          <td>${formatarDataHoraBR(r.data_retorno_previsto)}</td>
+          <td>${r.status}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarReserva('${r.id}')">Editar</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="excluirReserva('${r.id}')">Excluir</button>
+          </td>
+        </tr>`;
+    });
+
+  } catch (err) {
+    console.error("Erro em carregarReservas:", err);
     tbody.innerHTML = "<tr><td colspan='7'>Erro ao carregar reservas.</td></tr>";
-    return;
   }
-
-  if (!data?.length) {
-    tbody.innerHTML = "<tr><td colspan='7'>Nenhuma reserva encontrada.</td></tr>";
-    return;
-  }
-
-  tbody.innerHTML = "";
-  data.forEach((r) => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
-        <td>${r.funcionario_nome ?? "-"}</td>
-        <td>${formatarDataHoraBR(r.data_saida_prevista)}</td>
-        <td>${formatarDataHoraBR(r.data_retorno_previsto)}</td>
-        <td>${r.status}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarReserva('${r.id}')">Editar</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="excluirReserva('${r.id}')">Excluir</button>
-        </td>
-      </tr>`;
-  });
 }
 
 async function carregarFiltrosReservas() {
@@ -353,31 +138,131 @@ async function carregarFiltrosReservas() {
     <option value="finalizada">Finalizadas</option>
   `;
 
-  const { data: veiculos } = await supa.from("veiculos").select("*").order("modelo");
-  const { data: funcionarios } = await supa.from("funcionarios").select("*").order("nome");
+  try {
+    const { data: veiculos, error: errV } = await supa.from("veiculos").select("*").order("modelo").limit(50);
+    const { data: funcionarios, error: errF } = await supa.from("funcionarios").select("*").order("nome").limit(50);
 
-  veiculos?.forEach(v => {
-    selVeic.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
-  });
+    if (errV || errF) throw errV ?? errF;
 
-  funcionarios?.forEach(f => {
-    selFunc.innerHTML += `<option value="${f.id}">${f.nome}</option>`;
-  });
+    veiculos?.forEach(v => {
+      selVeic.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
+    });
+
+    funcionarios?.forEach(f => {
+      selFunc.innerHTML += `<option value="${f.id}">${f.nome}</option>`;
+    });
+
+  } catch (err) {
+    console.error("Erro em carregarFiltrosReservas:", err);
+  }
 }
 
+async function carregarHistorico() {
+  const tbody = document.getElementById("tabela-historico");
+  tbody.innerHTML = "<tr><td colspan='9'>Carregando...</td></tr>";
+
+  const filtroVeic = document.getElementById("filtro-historico-veiculo")?.value;
+  const filtroFunc = document.getElementById("filtro-historico-funcionario")?.value;
+  const filtroData = document.getElementById("filtro-historico-data")?.value;
+
+  try {
+    let query = supa.from("reservas_view").select("*").eq("status", "finalizada").limit(30);
+
+    if (filtroVeic) query = query.eq("veiculo_id", filtroVeic);
+    if (filtroFunc) query = query.eq("funcionario_id", filtroFunc);
+    if (filtroData) query = query.gte("data_saida_prevista", filtroData + "T00:00:00");
+
+    const { data, error } = await query.order("data_saida_prevista", { ascending: false });
+
+    if (error) throw error;
+
+    if (!data?.length) {
+      tbody.innerHTML = "<tr><td colspan='9'>Nenhum histórico encontrado.</td></tr>";
+      return;
+    }
+
+    tbody.innerHTML = "";
+    data.forEach((r) => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
+          <td>${r.funcionario_nome ?? "-"}</td>
+          <td>${r.motivo ?? "-"}</td>
+          <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
+          <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
+          <td>${r.km_inicio ?? "-"}</td>
+          <td>${r.km_fim ?? "-"}</td>
+          <td>
+      ${r.foto_painel_inicio
+        ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_inicio}')">Início</button>`
+        : "-"}
+      ${r.foto_painel_fim
+        ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_fim}')">Fim</button>`
+        : "-"}
+    </td>
+          <td>
+      <button class="btn btn-sm btn-outline-danger" onclick="excluirReserva('${r.id}')">
+        Excluir
+      </button>
+    </td>
+        </tr>`;
+    });
+
+  } catch (err) {
+    console.error("Erro em carregarHistorico:", err);
+    tbody.innerHTML = "<tr><td colspan='9'>Erro ao carregar histórico.</td></tr>";
+  }
+}
+
+async function carregarHistoricoFiltros() {
+  const selVeic = document.getElementById("filtro-historico-veiculo");
+  const selFunc = document.getElementById("filtro-historico-funcionario");
+
+  if (!selVeic || !selFunc) return;
+
+  selVeic.innerHTML = `<option value="">Todos</option>`;
+  selFunc.innerHTML = `<option value="">Todos</option>`;
+
+  try {
+    const { data: veiculos, error: errV } = await supa.from("veiculos").select("*").order("modelo").limit(50);
+    const { data: funcionarios, error: errF } = await supa.from("funcionarios").select("*").order("nome").limit(50);
+
+    if (errV || errF) throw errV ?? errF;
+
+    veiculos?.forEach(v => {
+      selVeic.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
+    });
+
+    funcionarios?.forEach(f => {
+      selFunc.innerHTML += `<option value="${f.id}">${f.nome}</option>`;
+    });
+
+  } catch (err) {
+    console.error("Erro em carregarHistoricoFiltros:", err);
+  }
+}
+
+// ------------------------------------------------------------
+// RESERVAS (continuação e funções com melhorias)
+// ------------------------------------------------------------
+
 async function abrirModalNovaReserva() {
-  const { data: veiculos } = await supa.from("veiculos").select("*").eq("status", "disponivel");
-  const { data: funcionarios } = await supa.from("funcionarios").select("*").eq("ativo", true);
+  try {
+    const { data: veiculos, error: veicErr } = await supa.from("veiculos").select("*").eq("status", "disponivel").limit(50);
+    const { data: funcionarios, error: funcErr } = await supa.from("funcionarios").select("*").eq("ativo", true).limit(50);
 
-  const optVeic = (veiculos || []).map(v =>
-    `<option value="${v.id}">${v.modelo} (${v.placa})</option>`
-  ).join("");
+    if (veicErr) throw veicErr;
+    if (funcErr) throw funcErr;
 
-  const optFunc = (funcionarios || []).map(f =>
-    `<option value="${f.id}">${f.nome}</option>`
-  ).join("");
+    const optVeic = (veiculos || []).map(v =>
+      `<option value="${v.id}">${v.modelo} (${v.placa})</option>`
+    ).join("");
 
-  const modal = `
+    const optFunc = (funcionarios || []).map(f =>
+      `<option value="${f.id}">${f.nome}</option>`
+    ).join("");
+
+    const modal = `
 <div class="modal fade" id="modalReserva" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content">
     <div class="modal-header bg-ilumi text-white">
@@ -407,119 +292,95 @@ async function abrirModalNovaReserva() {
     </div>
   </div></div>
 </div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalReserva").show();
-}
-
-async function existeConflito(veiculo_id, saidaISO, retornoISO, excludeId = null) {
-  let query = supa
-    .from("reservas")
-    .select("id, data_saida_prevista, data_retorno_prevista, data_saida_real, data_retorno_real, status")
-    .eq("veiculo_id", veiculo_id)
-    .neq("status", "cancelada");
-
-  if (excludeId) query = query.neq("id", excludeId);
-
-  const { data, error } = await query;
-  if (error) return false;
-
-  const novaIni = new Date(saidaISO).getTime();
-  const novaFim = new Date(retornoISO).getTime();
-
-  for (const r of data || []) {
-    const iniStr = r.data_saida_real || r.data_saida_prevista;
-    const fimStr = r.data_retorno_real || r.data_retorno_prevista;
-    if (!iniStr || !fimStr) continue;
-
-    const ini = new Date(iniStr).getTime();
-    const fim = new Date(fimStr).getTime();
-
-    if (novaIni < fim && novaFim > ini) return true;
+    document.getElementById("modal-container").innerHTML = modal;
+    new bootstrap.Modal("#modalReserva").show();
+  } catch (err) {
+    console.error("Erro abrirModalNovaReserva:", err);
+    Swal.fire("Erro", "Falha ao carregar dados para nova reserva.", "error");
   }
-
-  return false;
 }
 
 async function salvarReserva() {
-  const funcionario = document.getElementById("res-func").value;
-  const veiculo = document.getElementById("res-veic").value;
-  const saida = document.getElementById("res-saida").value;
-  const retorno = document.getElementById("res-retorno").value;
-  const motivo = document.getElementById("res-motivo").value.trim();
+  try {
+    const funcionario = document.getElementById("res-func").value;
+    const veiculo = document.getElementById("res-veic").value;
+    const saida = document.getElementById("res-saida").value;
+    const retorno = document.getElementById("res-retorno").value;
+    const motivo = document.getElementById("res-motivo").value.trim();
 
-  if (!funcionario || !veiculo || !saida || !retorno || !motivo) {
-    Swal.fire("Atenção", "Preencha todos os campos.", "warning");
-    return;
+    if (!funcionario || !veiculo || !saida || !retorno || !motivo) {
+      Swal.fire("Atenção", "Preencha todos os campos.", "warning");
+      return;
+    }
+
+    const dSaida = new Date(saida);
+    const dRetorno = new Date(retorno);
+    const agora = new Date();
+
+    if (dSaida < agora) {
+      Swal.fire("Atenção", "A data/hora de saída já passou.", "warning");
+      return;
+    }
+    if (dRetorno <= dSaida) {
+      Swal.fire("Atenção", "O retorno deve ser após a saída.", "warning");
+      return;
+    }
+
+    const conflito = await existeConflito(veiculo, saida, retorno);
+    if (conflito) {
+      Swal.fire("Conflito", "Este veículo já possui reserva nesse horário.", "error");
+      return;
+    }
+
+    const saidaISO = dSaida.toISOString();
+    const retornoISO = dRetorno.toISOString();
+
+    const { error } = await supa.from("reservas").insert({
+      funcionario_id: funcionario,
+      veiculo_id: veiculo,
+      data_saida_prevista: saidaISO,
+      data_retorno_previsto: retornoISO,
+      motivo,
+      status: "aberta",
+    });
+
+    if (error) {
+      console.error(error);
+      Swal.fire("Erro", "Falha ao salvar reserva.", "error");
+      return;
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById("modalReserva")).hide();
+    Swal.fire("Sucesso!", "Reserva cadastrada!", "success");
+
+    carregarReservas();
+    carregarHistorico();
+
+  } catch (err) {
+    console.error("Erro salvarReserva:", err);
+    Swal.fire("Erro", "Erro inesperado. Verifique o console.", "error");
   }
-
-  const dSaida = new Date(saida);
-  const dRetorno = new Date(retorno);
-  const agora = new Date();
-
-  if (dSaida < agora) {
-    Swal.fire("Atenção", "A data/hora de saída já passou.", "warning");
-    return;
-  }
-  if (dRetorno <= dSaida) {
-    Swal.fire("Atenção", "O retorno deve ser após a saída.", "warning");
-    return;
-  }
-
-  const conflito = await existeConflito(veiculo, saida, retorno);
-  if (conflito) {
-    Swal.fire("Conflito", "Este veículo já possui reserva nesse horário.", "error");
-    return;
-  }
-
-  const saidaISO = dSaida.toISOString();
-  const retornoISO = dRetorno.toISOString();
-
-  const { error } = await supa.from("reservas").insert({
-    funcionario_id: funcionario,
-    veiculo_id: veiculo,
-    data_saida_prevista: saidaISO,
-    data_retorno_previsto: retornoISO,
-    motivo,
-    status: "aberta",
-  });
-
-  if (error) {
-    console.error(error);
-    Swal.fire("Erro", "Falha ao salvar reserva.", "error");
-    return;
-  }
-
-  bootstrap.Modal.getInstance(document.getElementById("modalReserva")).hide();
-  Swal.fire("Sucesso!", "Reserva cadastrada!", "success");
-
-  carregarReservas();
-  carregarHistorico();
 }
 
 async function abrirModalEditarReserva(id) {
-  const { data: reserva, error } = await supa
-    .from("reservas")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  try {
+    const { data: reserva, error } = await supa.from("reservas").select("*").eq("id", id).maybeSingle();
+    if (error || !reserva) throw error || new Error("Reserva não encontrada");
 
-  if (error || !reserva) {
-    Swal.fire("Erro", "Reserva não encontrada.", "error");
-    return;
-  }
+    const { data: veiculos, error: errV } = await supa.from("veiculos").select("*").limit(50);
+    const { data: funcionarios, error: errF } = await supa.from("funcionarios").select("*").limit(50);
 
-  const { data: veiculos } = await supa.from("veiculos").select("*");
-  const { data: funcionarios } = await supa.from("funcionarios").select("*");
+    if (errV || errF) throw errV || errF;
 
-  const optVeic = (veiculos || []).map(v =>
-    `<option value="${v.id}" ${v.id === reserva.veiculo_id ? "selected" : ""}>${v.modelo} (${v.placa})</option>`
-  ).join("");
+    const optVeic = (veiculos || []).map(v =>
+      `<option value="${v.id}" ${v.id === reserva.veiculo_id ? "selected" : ""}>${v.modelo} (${v.placa})</option>`
+    ).join("");
 
-  const optFunc = (funcionarios || []).map(f =>
-    `<option value="${f.id}" ${f.id === reserva.funcionario_id ? "selected" : ""}>${f.nome}</option>`
-  ).join("");
+    const optFunc = (funcionarios || []).map(f =>
+      `<option value="${f.id}" ${f.id === reserva.funcionario_id ? "selected" : ""}>${f.nome}</option>`
+    ).join("");
 
-  const modal = `
+    const modal = `
 <div class="modal fade" id="modalEditReserva" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content">
     <div class="modal-header bg-primary text-white">
@@ -564,14 +425,17 @@ async function abrirModalEditarReserva(id) {
     </div>
   </div></div>
 </div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalEditReserva").show();
+    document.getElementById("modal-container").innerHTML = modal;
+    new bootstrap.Modal("#modalEditReserva").show();
+
+  } catch (err) {
+    console.error("Erro abrirModalEditarReserva:", err);
+    Swal.fire("Erro", "Falha ao abrir modal de edição.", "error");
+  }
 }
 
 async function salvarEdicaoReserva(id) {
   try {
-    console.log("Salvando edição para reserva ID:", id);
-
     const funcionario_id = document.getElementById("edit-res-func")?.value;
     const veiculo_id = document.getElementById("edit-res-veic")?.value;
     const data_saida_prevista = document.getElementById("edit-res-saida-prev")?.value || null;
@@ -614,24 +478,18 @@ async function salvarEdicaoReserva(id) {
       }
     }
 
-    const saidaPrevISO = dSaidaPrev ? dSaidaPrev.toISOString() : null;
-    const retornoPrevISO = dRetPrev ? dRetPrev.toISOString() : null;
-    const saidaRealISO = dSaidaReal ? dSaidaReal.toISOString() : null;
-    const retornoRealISO = dRetReal ? dRetReal.toISOString() : null;
-
     const updates = {
       funcionario_id,
       veiculo_id,
-      data_saida_prevista: saidaPrevISO,
-      data_retorno_previsto: retornoPrevISO,
-      data_saida_real: saidaRealISO,
-      data_retorno_real: retornoRealISO,
+      data_saida_prevista: dSaidaPrev ? dSaidaPrev.toISOString() : null,
+      data_retorno_previsto: dRetPrev ? dRetPrev.toISOString() : null,
+      data_saida_real: dSaidaReal ? dSaidaReal.toISOString() : null,
+      data_retorno_real: dRetReal ? dRetReal.toISOString() : null,
       km_inicio,
       km_fim,
       motivo
     };
 
-    console.log("Updates enviados:", updates);
     const { error } = await supa.from("reservas").update(updates).eq("id", id);
 
     if (error) {
@@ -651,236 +509,134 @@ async function salvarEdicaoReserva(id) {
     carregarHistorico();
 
   } catch (err) {
-    console.error("Erro inesperado:", err);
+    console.error("Erro salvarEdicaoReserva:", err);
     Swal.fire("Erro", "Erro inesperado. Verifique o console.", "error");
   }
 }
 
 async function excluirReserva(id) {
-  const confirmar = await Swal.fire({
-    title: "Excluir reserva?",
-    text: "Esta ação é irreversível.",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Sim, excluir",
-    cancelButtonText: "Cancelar"
-  });
+  try {
+    const confirmar = await Swal.fire({
+      title: "Excluir reserva?",
+      text: "Esta ação é irreversível.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, excluir",
+      cancelButtonText: "Cancelar"
+    });
 
-  if (!confirmar.isConfirmed) return;
+    if (!confirmar.isConfirmed) return;
 
-  const { error } = await supa.from("reservas").delete().eq("id", id);
+    const { error } = await supa.from("reservas").delete().eq("id", id);
 
-  if (error) {
-    Swal.fire("Erro", "Falha ao excluir reserva.", "error");
-    console.error(error);
-    return;
+    if (error) {
+      Swal.fire("Erro", "Falha ao excluir reserva.", "error");
+      console.error(error);
+      return;
+    }
+
+    Swal.fire("Excluída!", "Reserva excluída com sucesso.", "success");
+    carregarReservas();
+    carregarHistorico();
+
+  } catch (err) {
+    console.error("Erro excluirReserva:", err);
+    Swal.fire("Erro", "Erro inesperado ao excluir.", "error");
   }
-
-  Swal.fire("Excluída!", "Reserva excluída com sucesso.", "success");
-  carregarReservas();
-  carregarHistorico();
-}
-
-// ------------------------------------------------------------
-// HISTÓRICO
-// ------------------------------------------------------------
-async function carregarHistorico() {
-  const tbody = document.getElementById("tabela-historico");
-  tbody.innerHTML = "<tr><td colspan='9'>Carregando...</td></tr>";
-
-  const filtroVeic = document.getElementById("filtro-historico-veiculo")?.value;
-  const filtroFunc = document.getElementById("filtro-historico-funcionario")?.value;
-  const filtroData = document.getElementById("filtro-historico-data")?.value;
-
-  let query = supa.from("reservas_view").select("*").eq("status", "finalizada");
-
-  if (filtroVeic) query = query.eq("veiculo_id", filtroVeic);
-  if (filtroFunc) query = query.eq("funcionario_id", filtroFunc);
-  if (filtroData) query = query.gte("data_saida_prevista", filtroData + "T00:00:00");
-
-  const { data, error } = await query.order("data_saida_prevista", { ascending: false });
-
-  if (error) {
-    tbody.innerHTML = "<tr><td colspan='9'>Erro ao carregar histórico.</td></tr>";
-    return;
-  }
-
-  if (!data?.length) {
-    tbody.innerHTML = "<tr><td colspan='9'>Nenhum histórico encontrado.</td></tr>";
-    return;
-  }
-
-  tbody.innerHTML = "";
-  data.forEach((r) => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${r.veiculo_modelo} (${r.veiculo_placa})</td>
-        <td>${r.funcionario_nome ?? "-"}</td>
-        <td>${r.motivo ?? "-"}</td>
-        <td>${formatarDataHoraBR(r.data_saida_real || r.data_saida_prevista)}</td>
-        <td>${formatarDataHoraBR(r.data_retorno_real || r.data_retorno_previsto)}</td>
-        <td>${r.km_inicio ?? "-"}</td>
-        <td>${r.km_fim ?? "-"}</td>
-        <td>
-  ${r.foto_painel_inicio
-    ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_inicio}')">Início</button>`
-    : "-"}
-  ${r.foto_painel_fim
-    ? `<button class="btn btn-sm btn-outline-info" onclick="verFoto('${r.foto_painel_fim}')">Fim</button>`
-    : "-"}
-</td>
-        <td>
-  <button class="btn btn-sm btn-outline-danger" onclick="excluirReserva('${r.id}')">
-    Excluir
-  </button>
-</td>
-      </tr>`;
-  });
-}
-
-async function carregarHistoricoFiltros() {
-  const selVeic = document.getElementById("filtro-historico-veiculo");
-  const selFunc = document.getElementById("filtro-historico-funcionario");
-
-  if (!selVeic || !selFunc) return;
-
-  selVeic.innerHTML = `<option value="">Todos</option>`;
-  selFunc.innerHTML = `<option value="">Todos</option>`;
-
-  const { data: veiculos } = await supa.from("veiculos").select("*").order("modelo");
-  const { data: funcionarios } = await supa.from("funcionarios").select("*").order("nome");
-
-  veiculos?.forEach(v => {
-    selVeic.innerHTML += `<option value="${v.id}">${v.modelo} (${v.placa})</option>`;
-  });
-
-  funcionarios?.forEach(f => {
-    selFunc.innerHTML += `<option value="${f.id}">${f.nome}</option>`;
-  });
-}
-
-function verFoto(path) {
-  const clean = (path || "").trim();
-  if (!clean) return;
-
-  // usa a URL do seu projeto Supabase (a mesma do supabaseClient.js)
-  const supabaseUrl = "https://awlylgtadbljkjgbneds.supabase.co";
-
-  // bucket público
-  const url = `${supabaseUrl}/storage/v1/object/public/painel-fotos/${encodeURI(clean)}`;
-
-  console.log("Abrindo foto:", url);
-  window.open(url, "_blank");
 }
 
 // ------------------------------------------------------------
 // FUNCIONÁRIOS (USUÁRIOS)
 // ------------------------------------------------------------
+
 async function carregarUsuarios() {
   const tbody = document.getElementById("tabela-usuarios");
   tbody.innerHTML = "<tr><td colspan='4'>Carregando...</td></tr>";
 
-  const { data, error } = await supa.from("funcionarios").select("*").order("nome");
+  try {
+    const { data, error } = await supa.from("funcionarios").select("*").order("nome").limit(50);
 
-  if (error) {
+    if (error) throw error;
+
+    if (!data?.length) {
+      tbody.innerHTML = "<tr><td colspan='4'>Nenhum funcionário encontrado.</td></tr>";
+      return;
+    }
+
+    tbody.innerHTML = "";
+    data.forEach((f) => {
+      tbody.innerHTML += `
+        <tr>
+          <td>${f.nome}</td>
+          <td>${f.email}</td>
+          <td>${f.ativo ? "Ativo" : "Inativo"}</td>
+          <td>
+            <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarFuncionario('${f.id}')">Editar</button>
+            <button class="btn btn-sm btn-outline-warning" onclick="toggleAtivo('${f.id}', ${f.ativo})">${f.ativo ? "Desativar" : "Ativar"}</button>
+            <button class="btn btn-sm btn-outline-danger" onclick="excluirFuncionario('${f.id}')">Excluir</button>
+          </td>
+        </tr>`;
+    });
+
+  } catch (err) {
+    console.error("Erro carregarUsuarios:", err);
     tbody.innerHTML = "<tr><td colspan='4'>Erro ao carregar funcionários.</td></tr>";
-    return;
   }
-
-  if (!data?.length) {
-    tbody.innerHTML = "<tr><td colspan='4'>Nenhum funcionário encontrado.</td></tr>";
-    return;
-  }
-
-  tbody.innerHTML = "";
-  data.forEach((f) => {
-    tbody.innerHTML += `
-      <tr>
-        <td>${f.nome}</td>
-        <td>${f.email}</td>
-        <td>${f.ativo ? "Ativo" : "Inativo"}</td>
-        <td>
-          <button class="btn btn-sm btn-outline-primary" onclick="abrirModalEditarFuncionario('${f.id}')">Editar</button>
-          <button class="btn btn-sm btn-outline-warning" onclick="toggleAtivo('${f.id}', ${f.ativo})">${f.ativo ? "Desativar" : "Ativar"}</button>
-          <button class="btn btn-sm btn-outline-danger" onclick="excluirFuncionario('${f.id}')">Excluir</button>
-        </td>
-      </tr>`;
-  });
-}
-
-async function abrirModalNovoFuncionario() {
-  const modal = `
-<div class="modal fade" id="modalFuncionario" tabindex="-1">
-  <div class="modal-dialog"><div class="modal-content">
-    <div class="modal-header bg-ilumi text-white">
-      <h5 class="modal-title">Adicionar Funcionário</h5>
-      <button class="btn-close" data-bs-dismiss="modal"></button>
-    </div>
-    <div class="modal-body">
-      <label class="form-label">Nome</label>
-      <input id="func-nome" class="form-control mb-2">
-
-      <label class="form-label">E-mail</label>
-      <input id="func-email" type="email" class="form-control mb-2">
-
-      <label class="form-label">Senha</label>
-      <input id="func-senha" type="password" class="form-control mb-2">
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-      <button class="btn btn-ilumi" onclick="salvarNovoFuncionario()">Salvar</button>
-    </div>
-  </div></div>
-</div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalFuncionario").show();
 }
 
 async function salvarNovoFuncionario() {
-  const nome = document.getElementById("func-nome").value.trim();
-  const email = document.getElementById("func-email").value.trim();
-  const senha = document.getElementById("func-senha").value;
+  try {
+    const nome = document.getElementById("func-nome").value.trim();
+    const email = document.getElementById("func-email").value.trim();
+    const senha = document.getElementById("func-senha").value;
 
-  if (!nome || !email || !senha) {
-    Swal.fire("Atenção", "Preencha todos os campos!", "warning");
-    return;
-  }
+    if (!nome || !email || !senha) {
+      Swal.fire("Atenção", "Preencha todos os campos!", "warning");
+      return;
+    }
 
-  const { data, error } = await supa.auth.signUp({
-    email,
-    password: senha,
-  });
+    const { data, error } = await supa.auth.signUp({
+      email,
+      password: senha,
+    });
 
-  if (error) {
-    Swal.fire("Erro", "Falha ao criar usuário.", "error");
-    return;
-  }
+    if (error) {
+      Swal.fire("Erro", "Falha ao criar usuário.", "error");
+      return;
+    }
 
-  const { error: dbError } = await supa.from("funcionarios").insert({
-    id: data.user.id,
-    nome,
-    email,
-    ativo: true,
-  });
+    const { error: dbError } = await supa.from("funcionarios").insert({
+      id: data.user.id,
+      nome,
+      email,
+      ativo: true,
+    });
 
-  if (dbError) {
-    Swal.fire("Erro", "Falha ao salvar funcionário.", "error");
-    return;
-  }
+    if (dbError) {
+      Swal.fire("Erro", "Falha ao salvar funcionário.", "error");
+      return;
+    }
 
     bootstrap.Modal.getInstance(document.getElementById("modalFuncionario")).hide();
-  Swal.fire("Sucesso!", "Funcionário cadastrado!", "success");
-  carregarUsuarios();
+    Swal.fire("Sucesso!", "Funcionário cadastrado!", "success");
+    carregarUsuarios();
+
+  } catch (err) {
+    console.error("Erro salvarNovoFuncionario:", err);
+    Swal.fire("Erro", "Erro inesperado ao criar funcionário.", "error");
+  }
 }
 
-async function abrirModalEditarFuncionario(id) {
-  const { data, error } = await supa.from("funcionarios").select("*").eq("id", id).maybeSingle();
-  if (error || !data) {
-    Swal.fire("Erro", "Funcionário não encontrado.", "error");
-    return;
-  }
+// ------------------------------------------------------------
+// FUNCIONÁRIOS (continuação)
+// ------------------------------------------------------------
 
-  const modal = `
+async function abrirModalEditarFuncionario(id) {
+  try {
+    const { data, error } = await supa.from("funcionarios").select("*").eq("id", id).maybeSingle();
+    if (error || !data) throw error || new Error("Funcionário não encontrado.");
+
+    const modal = `
 <div class="modal fade" id="modalFuncionario" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content">
     <div class="modal-header bg-primary text-white">
@@ -906,92 +662,117 @@ async function abrirModalEditarFuncionario(id) {
     </div>
   </div></div>
 </div>`;
-  document.getElementById("modal-container").innerHTML = modal;
-  new bootstrap.Modal("#modalFuncionario").show();
+    document.getElementById("modal-container").innerHTML = modal;
+    new bootstrap.Modal("#modalFuncionario").show();
+
+  } catch (err) {
+    console.error("Erro abrirModalEditarFuncionario:", err);
+    Swal.fire("Erro", "Falha ao carregar dados do funcionário.", "error");
+  }
 }
 
 async function salvarEdicaoFuncionario(id) {
-  const nome = document.getElementById("func-nome").value.trim();
-  const email = document.getElementById("func-email").value.trim();
-  const ativo = document.getElementById("func-ativo").value === "true";
+  try {
+    const nome = document.getElementById("func-nome").value.trim();
+    const email = document.getElementById("func-email").value.trim();
+    const ativo = document.getElementById("func-ativo").value === "true";
 
-  if (!nome || !email) {
-    Swal.fire("Atenção", "Preencha nome e e-mail!", "warning");
-    return;
+    if (!nome || !email) {
+      Swal.fire("Atenção", "Preencha nome e e-mail!", "warning");
+      return;
+    }
+
+    const { error } = await supa
+      .from("funcionarios")
+      .update({ nome, email, ativo })
+      .eq("id", id);
+
+    if (error) {
+      Swal.fire("Erro", "Falha ao atualizar funcionário.", "error");
+      return;
+    }
+
+    bootstrap.Modal.getInstance(document.getElementById("modalFuncionario")).hide();
+    Swal.fire("Sucesso!", "Funcionário atualizado!", "success");
+    carregarUsuarios();
+
+  } catch (err) {
+    console.error("Erro salvarEdicaoFuncionario:", err);
+    Swal.fire("Erro", "Erro inesperado ao atualizar funcionário.", "error");
   }
-
-  const { error } = await supa
-    .from("funcionarios")
-    .update({ nome, email, ativo })
-    .eq("id", id);
-
-  if (error) {
-    Swal.fire("Erro", "Falha ao atualizar funcionário.", "error");
-    return;
-  }
-
-  bootstrap.Modal.getInstance(document.getElementById("modalFuncionario")).hide();
-  Swal.fire("Sucesso!", "Funcionário atualizado!", "success");
-  carregarUsuarios();
 }
 
 async function toggleAtivo(id, atual) {
-  const novo = !atual;
-  const { error } = await supa
-    .from("funcionarios")
-    .update({ ativo: novo })
-    .eq("id", id);
+  try {
+    const novo = !atual;
+    const { error } = await supa
+      .from("funcionarios")
+      .update({ ativo: novo })
+      .eq("id", id);
 
-  if (error) {
-    Swal.fire("Erro", "Falha ao alterar status.", "error");
-    return;
+    if (error) {
+      Swal.fire("Erro", "Falha ao alterar status.", "error");
+      return;
+    }
+
+    Swal.fire("Sucesso!", `Funcionário ${novo ? "ativado" : "desativado"}!`, "success");
+    carregarUsuarios();
+
+  } catch (err) {
+    console.error("Erro toggleAtivo:", err);
+    Swal.fire("Erro", "Erro inesperado ao alterar status.", "error");
   }
-
-  Swal.fire("Sucesso!", `Funcionário ${novo ? "ativado" : "desativado"}!`, "success");
-  carregarUsuarios();
 }
 
 async function excluirFuncionario(id) {
-  const confirmar = await Swal.fire({
-    title: "Excluir funcionário?",
-    text: "Esta ação é irreversível e pode afetar reservas.",
-    icon: "warning",
-    showCancelButton: true,
-    confirmButtonText: "Sim, excluir",
-    cancelButtonText: "Cancelar"
-  });
+  try {
+    const confirmar = await Swal.fire({
+      title: "Excluir funcionário?",
+      text: "Esta ação é irreversível e pode afetar reservas.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sim, excluir",
+      cancelButtonText: "Cancelar"
+    });
 
-  if (!confirmar.isConfirmed) return;
+    if (!confirmar.isConfirmed) return;
 
-  const { error } = await supa.from("funcionarios").delete().eq("id", id);
+    const { error } = await supa.from("funcionarios").delete().eq("id", id);
 
-  if (error) {
-    Swal.fire("Erro", "Falha ao excluir funcionário.", "error");
-    console.error(error);
-    return;
+    if (error) {
+      Swal.fire("Erro", "Falha ao excluir funcionário.", "error");
+      console.error(error);
+      return;
+    }
+
+    Swal.fire("Excluído!", "Funcionário excluído com sucesso.", "success");
+    carregarUsuarios();
+
+  } catch (err) {
+    console.error("Erro excluirFuncionario:", err);
+    Swal.fire("Erro", "Erro inesperado ao excluir funcionário.", "error");
   }
-
-  Swal.fire("Excluído!", "Funcionário excluído com sucesso.", "success");
-  carregarUsuarios();
 }
 
 // ------------------------------------------------------------
 // PERMISSÕES DE VEÍCULOS
 // ------------------------------------------------------------
+
 async function abrirModalPermissoes(veiculoId) {
-  const { data: funcionarios } = await supa.from("funcionarios").select("*").eq("ativo", true);
+  try {
+    const { data: funcionarios } = await supa.from("funcionarios").select("*").eq("ativo", true).limit(50);
+    const { data: autorizados } = await supa.from("veiculo_funcionarios").select("funcionario_id").eq("veiculo_id", veiculoId);
 
-  const { data: autorizados } = await supa.from("veiculo_funcionarios").select("funcionario_id").eq("veiculo_id", veiculoId);
-  const autorizadosIds = autorizados ? autorizados.map(a => a.funcionario_id) : [];
+    const autorizadosIds = autorizados?.map(a => a.funcionario_id) || [];
 
-  const checkboxes = (funcionarios || []).map(f =>
-    `<div class="form-check">
-      <input class="form-check-input" type="checkbox" value="${f.id}" id="func-${f.id}" ${autorizadosIds.includes(f.id) ? "checked" : ""}>
-      <label class="form-check-label" for="func-${f.id}">${f.nome}</label>
-    </div>`
-  ).join("");
+    const checkboxes = (funcionarios || []).map(f =>
+      `<div class="form-check">
+        <input class="form-check-input" type="checkbox" value="${f.id}" id="func-${f.id}" ${autorizadosIds.includes(f.id) ? "checked" : ""}>
+        <label class="form-check-label" for="func-${f.id}">${f.nome}</label>
+      </div>`
+    ).join("");
 
-  const subModal = `
+    const subModal = `
 <div class="modal fade" id="modalPermissoes" tabindex="-1">
   <div class="modal-dialog"><div class="modal-content">
     <div class="modal-header bg-success text-white">
@@ -1009,25 +790,48 @@ async function abrirModalPermissoes(veiculoId) {
   </div></div>
 </div>`;
 
-  document.getElementById("modal-container").innerHTML += subModal;
-  new bootstrap.Modal("#modalPermissoes").show();
+    document.getElementById("modal-container").innerHTML += subModal;
+    new bootstrap.Modal("#modalPermissoes").show();
+
+  } catch (err) {
+    console.error("Erro abrirModalPermissoes:", err);
+    Swal.fire("Erro", "Falha ao carregar permissões.", "error");
+  }
 }
 
 async function salvarPermissoes(veiculoId) {
-  const checkboxes = document.querySelectorAll("#modalPermissoes input[type='checkbox']:checked");
-  const selectedIds = Array.from(checkboxes).map(cb => cb.value);
+  try {
+    const checkboxes = document.querySelectorAll("#modalPermissoes input[type='checkbox']:checked");
+    const selectedIds = Array.from(checkboxes).map(cb => cb.value);
 
-  await supa.from("veiculo_funcionarios").delete().eq("veiculo_id", veiculoId);
+    // Remove permissões atuais
+    const { error: delError } = await supa.from("veiculo_funcionarios").delete().eq("veiculo_id", veiculoId);
+    if (delError) throw delError;
 
-  if (selectedIds.length > 0) {
-    const inserts = selectedIds.map(funcId => ({ veiculo_id: veiculoId, funcionario_id: funcId }));
-    const { error } = await supa.from("veiculo_funcionarios").insert(inserts);
-    if (error) {
-      Swal.fire("Erro", "Falha ao salvar permissões.", "error");
-      return;
+    // Insere os novos autorizados
+    if (selectedIds.length > 0) {
+      const inserts = selectedIds.map(funcId => ({ veiculo_id: veiculoId, funcionario_id: funcId }));
+      const { error: insError } = await supa.from("veiculo_funcionarios").insert(inserts);
+      if (insError) throw insError;
     }
-  }
 
-  bootstrap.Modal.getInstance(document.getElementById("modalPermissoes")).hide();
-  Swal.fire("Sucesso!", "Permissões atualizadas!", "success");
+    bootstrap.Modal.getInstance(document.getElementById("modalPermissoes")).hide();
+    Swal.fire("Sucesso!", "Permissões atualizadas!", "success");
+  } catch (err) {
+    console.error("Erro salvarPermissoes:", err);
+    Swal.fire("Erro", "Falha ao salvar permissões.", "error");
+  }
+}
+
+// ------------------------------------------------------------
+// Função auxiliar para abrir fotos armazenadas
+// ------------------------------------------------------------
+function verFoto(path) {
+  const clean = (path || "").trim();
+  if (!clean) return;
+
+  const supabaseUrl = "https://awlylgtadbljkjgbneds.supabase.co";
+  const url = `${supabaseUrl}/storage/v1/object/public/painel-fotos/${encodeURI(clean)}`;
+  
+  window.open(url, "_blank");
 }
